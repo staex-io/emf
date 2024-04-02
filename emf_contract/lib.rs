@@ -54,19 +54,18 @@ mod emf_contract {
         #[ink::test]
         fn default_works() {
             let emf_contract = EmfContract::default();
-            assert_eq!(emf_contract.get(), false);
+            assert!(!emf_contract.get());
         }
 
         /// We test a simple use case of our contract.
         #[ink::test]
         fn it_works() {
             let mut emf_contract = EmfContract::new(false);
-            assert_eq!(emf_contract.get(), false);
+            assert!(!emf_contract.get());
             emf_contract.flip();
-            assert_eq!(emf_contract.get(), true);
+            assert!(emf_contract.get());
         }
     }
-
 
     /// This is how you'd write end-to-end (E2E) or integration tests for ink! contracts.
     ///
@@ -101,7 +100,7 @@ mod emf_contract {
             // Then
             let get = call_builder.get();
             let get_result = client.call(&ink_e2e::alice(), &get).dry_run().await?;
-            assert!(matches!(get_result.return_value(), false));
+            assert!(!get_result.return_value());
 
             Ok(())
         }
@@ -120,20 +119,17 @@ mod emf_contract {
 
             let get = call_builder.get();
             let get_result = client.call(&ink_e2e::bob(), &get).dry_run().await?;
-            assert!(matches!(get_result.return_value(), false));
+            assert!(!get_result.return_value());
 
             // When
             let flip = call_builder.flip();
-            let _flip_result = client
-                .call(&ink_e2e::bob(), &flip)
-                .submit()
-                .await
-                .expect("flip failed");
+            let _flip_result =
+                client.call(&ink_e2e::bob(), &flip).submit().await.expect("flip failed");
 
             // Then
             let get = call_builder.get();
             let get_result = client.call(&ink_e2e::bob(), &get).dry_run().await?;
-            assert!(matches!(get_result.return_value(), true));
+            assert!(get_result.return_value());
 
             Ok(())
         }
