@@ -2,8 +2,10 @@
 
 #[ink::contract]
 mod emf_contract {
-    use ink::prelude::string::String;
+    use ink::prelude::{collections::VecDeque, string::String};
     use ink::storage::{traits::StorageLayout, Mapping};
+
+    const AVG_DAYS_IN_MONTH: usize = 30;
 
     #[ink(storage)]
     pub struct EmfContract {
@@ -26,7 +28,15 @@ mod emf_contract {
     pub struct SubEntity {
         pub entity: AccountId,
         pub location: String,
+        pub measurements: VecDeque<Measurement>,
         pub deleted: bool,
+    }
+
+    #[ink::scale_derive(Encode, Decode, TypeInfo)]
+    #[cfg_attr(feature = "std", derive(StorageLayout))]
+    pub struct Measurement {
+        pub value: u128,
+        pub timestamp: u64,
     }
 
     #[ink(event)]
@@ -61,6 +71,7 @@ mod emf_contract {
         SubEntityAlreadyExists,
         SubEntityNotFound,
         SubEntityBelongingFailed,
+        SubEntityAlreadyDeleted,
         StorageExceeded,
         Unknown,
     }
@@ -110,6 +121,7 @@ mod emf_contract {
                 &SubEntity {
                     entity: self.env().caller(),
                     location: location.clone(),
+                    measurements: VecDeque::with_capacity(AVG_DAYS_IN_MONTH),
                     deleted: false,
                 },
             )?;
@@ -124,8 +136,7 @@ mod emf_contract {
         #[ink(message)]
         pub fn delete_sub_entity(&mut self, sub_entity: AccountId) -> Result<(), EmfError> {
             self.entities.get(self.env().caller()).ok_or(EmfError::EntityNotFound)?;
-            let sub_entity_record =
-                self.sub_entities.get(sub_entity).ok_or(EmfError::SubEntityNotFound)?;
+            let sub_entity_record = self.load_sub_entity(sub_entity)?;
             if self.env().caller() != sub_entity_record.entity {
                 return Err(EmfError::SubEntityBelongingFailed);
             }
@@ -134,6 +145,7 @@ mod emf_contract {
                 &SubEntity {
                     entity: sub_entity_record.entity,
                     location: sub_entity_record.location,
+                    measurements: sub_entity_record.measurements,
                     deleted: true,
                 },
             )?;
@@ -145,18 +157,30 @@ mod emf_contract {
         }
 
         #[ink(message)]
-        pub fn store_measurement(&mut self) -> Result<(), EmfError> {
+        pub fn store_measurement(&mut self, value: u128) -> Result<(), EmfError> {
+            let sub_entity_record = self.load_sub_entity(self.env().caller())?;
             todo!()
         }
 
         #[ink(message)]
         pub fn store_measurement_spike(&mut self) -> Result<(), EmfError> {
+            let sub_entity_record = self.load_sub_entity(self.env().caller())?;
             todo!()
         }
 
         #[ink(message)]
         pub fn check_sub_entity(&mut self) -> Result<(), EmfError> {
+            let sub_entity_record = self.load_sub_entity(self.env().caller())?;
             todo!()
+        }
+
+        fn load_sub_entity(&self, sub_entity: AccountId) -> Result<SubEntity, EmfError> {
+            let sub_entity_record =
+                self.sub_entities.get(sub_entity).ok_or(EmfError::SubEntityNotFound)?;
+            if sub_entity_record.deleted {
+                return Err(EmfError::SubEntityAlreadyDeleted);
+            }
+            Ok(sub_entity_record)
         }
     }
 
@@ -271,10 +295,15 @@ mod emf_contract {
             let err = emf_contract.delete_sub_entity(bob).unwrap_err();
             assert_eq!(EmfError::SubEntityBelongingFailed, err);
 
-            // Test successfully delete sub-entity.
             set_sender(alice);
+
+            // Test successfully delete sub-entity.
             emf_contract.delete_sub_entity(bob).unwrap();
             assert!(emf_contract.sub_entities.get(bob).unwrap().deleted);
+
+            // Test that we cannot delete sub-entity twice.
+            let err = emf_contract.delete_sub_entity(bob).unwrap_err();
+            assert_eq!(EmfError::SubEntityAlreadyDeleted, err);
 
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
             /*
