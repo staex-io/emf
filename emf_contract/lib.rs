@@ -2,6 +2,7 @@
 
 #[ink::contract]
 mod emf_contract {
+    use ink::prelude::string::String;
     use ink::storage::{traits::StorageLayout, Mapping};
 
     #[ink(storage)]
@@ -24,6 +25,7 @@ mod emf_contract {
     #[cfg_attr(feature = "std", derive(StorageLayout))]
     pub struct SubEntity {
         pub entity: AccountId,
+        pub location: String,
         pub deleted: bool,
     }
 
@@ -39,6 +41,7 @@ mod emf_contract {
         pub entity: AccountId,
         #[ink(topic)]
         pub sub_entity: AccountId,
+        pub location: String,
     }
 
     #[ink(event)]
@@ -82,7 +85,11 @@ mod emf_contract {
         }
 
         #[ink(message)]
-        pub fn create_sub_entity(&mut self, sub_entity: AccountId) -> Result<(), EmfError> {
+        pub fn create_sub_entity(
+            &mut self,
+            sub_entity: AccountId,
+            location: String,
+        ) -> Result<(), EmfError> {
             self.entities.get(self.env().caller()).ok_or(EmfError::EntityNotFound)?;
             if self.sub_entities.get(sub_entity).is_some() {
                 return Err(EmfError::SubEntityAlreadyExists);
@@ -91,12 +98,14 @@ mod emf_contract {
                 sub_entity,
                 &SubEntity {
                     entity: self.env().caller(),
+                    location: location.clone(),
                     deleted: false,
                 },
             );
             self.env().emit_event(SubEntityCreated {
                 entity: self.env().caller(),
                 sub_entity,
+                location,
             });
             Ok(())
         }
@@ -113,6 +122,7 @@ mod emf_contract {
                 sub_entity,
                 &SubEntity {
                     entity: sub_entity_record.entity,
+                    location: sub_entity_record.location,
                     deleted: true,
                 },
             );
@@ -129,6 +139,9 @@ mod emf_contract {
         use ink::{env::test::EmittedEvent, primitives::AccountId};
 
         use super::*;
+
+        /// Default location for the sub-entity.
+        const LOCATION: &str = "123,321";
 
         /// We test if the default constructor does its job.
         #[ink::test]
@@ -173,21 +186,21 @@ mod emf_contract {
             set_sender(alice);
 
             // Test that we cannot create sub-entity before creating entity.
-            let err = emf_contract.create_sub_entity(bob).unwrap_err();
+            let err = emf_contract.create_sub_entity(bob, LOCATION.into()).unwrap_err();
             assert_eq!(EmfError::EntityNotFound, err);
 
             // Create entity.
             emf_contract.create_entity().unwrap();
 
             // Test successful creation.
-            emf_contract.create_sub_entity(bob).unwrap();
+            emf_contract.create_sub_entity(bob, LOCATION.into()).unwrap();
             assert!(emf_contract.sub_entities.get(bob).is_some());
 
             // Test that we don't have other entities.
             assert!(emf_contract.sub_entities.get(default_accounts().charlie).is_none());
 
             // Test that sub-entity cannot be created twice.
-            let err = emf_contract.create_sub_entity(bob).unwrap_err();
+            let err = emf_contract.create_sub_entity(bob, LOCATION.into()).unwrap_err();
             assert_eq!(EmfError::SubEntityAlreadyExists, err);
 
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
@@ -195,7 +208,7 @@ mod emf_contract {
             // for sub-entity created event.
             assert_eq!(2, emitted_events.len());
             assert_entity_created_event(&emitted_events[0], alice);
-            assert_sub_entity_created_event(&emitted_events[1], alice, bob);
+            assert_sub_entity_created_event(&emitted_events[1], alice, bob, LOCATION.into());
         }
 
         /// We test sub-entity deletion.
@@ -222,7 +235,7 @@ mod emf_contract {
             assert_eq!(EmfError::SubEntityNotFound, err);
 
             // Test successful sub-entity creation.
-            emf_contract.create_sub_entity(bob).unwrap();
+            emf_contract.create_sub_entity(bob, String::new()).unwrap();
             assert!(emf_contract.sub_entities.get(bob).is_some());
             assert!(!emf_contract.sub_entities.get(bob).unwrap().deleted);
 
@@ -256,10 +269,12 @@ mod emf_contract {
             event: &EmittedEvent,
             entity: AccountId,
             sub_entity: AccountId,
+            location: String,
         ) {
             let evt = decode_event::<SubEntityCreated>(event);
             assert_eq!(entity, evt.entity);
             assert_eq!(sub_entity, evt.sub_entity);
+            assert_eq!(location, evt.location);
         }
 
         fn assert_sub_entity_deleted_event(
