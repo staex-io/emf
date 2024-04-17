@@ -7,6 +7,17 @@ mod emf_contract {
 
     const AVG_DAYS_IN_MONTH: usize = 30;
     const SECS_IN_23H: u64 = 82_800;
+    const SECS_IN_ONE_MINUTE: u64 = 60;
+
+    // If time between spikes are more than this diff
+    // we think that spike is new and we can save it as
+    // something new.
+    // 6m in seconds.
+    const TOO_MUCH_SPIKES_TIME_DIFF: u64 = 360;
+    // Actually it means we need 10 spikes to spawn too much spikes event.
+    // Because we need to have 9 spikes in the storage and 1 newly received spike
+    // by smart contract method execution call.
+    const TOO_MUCH_SPIKES_COUNT: usize = 9;
 
     #[ink(storage)]
     pub struct EmfContract {
@@ -57,6 +68,23 @@ mod emf_contract {
         pub sub_entity: AccountId,
     }
 
+    #[ink(event)]
+    pub struct NewSpike {
+        #[ink(topic)]
+        pub entity: AccountId,
+        #[ink(topic)]
+        pub sub_entity: AccountId,
+        pub value: u128,
+    }
+
+    #[ink(event)]
+    pub struct TooMuchSpikes {
+        #[ink(topic)]
+        pub entity: AccountId,
+        #[ink(topic)]
+        pub sub_entity: AccountId,
+    }
+
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(StorageLayout))]
     #[cfg_attr(test, derive(Debug, PartialEq))]
@@ -99,7 +127,12 @@ mod emf_contract {
     }
 
     impl Measurements {
-        pub fn add(&mut self, value: u128, timestamp: u64) -> Result<bool, EmfError> {
+        pub fn add(
+            &mut self,
+            value: u128,
+            timestamp: u64,
+            min_time_diff: u64,
+        ) -> Result<bool, EmfError> {
             // If there are values in vector.
             // We need to check that previous value was not wrote
             // in less than 23h.
@@ -107,8 +140,9 @@ mod emf_contract {
             // but block timestamp which is volatile from time to time.
             if !self.0.is_empty() {
                 // Unwrap is ok because we checked length.
-                let diff = self.0.back().unwrap().timestamp.checked_sub(timestamp);
-                if diff.is_some() && diff.unwrap() < SECS_IN_23H {
+                // Last unwrap is ok as new timestamp cannot be less than in storage.
+                let diff = timestamp.checked_sub(self.0.back().unwrap().timestamp).unwrap();
+                if diff < min_time_diff {
                     return Err(EmfError::MeasurementTooFast);
                 }
             }
@@ -199,7 +233,7 @@ mod emf_contract {
         pub fn store_measurement(&mut self, value: u128) -> Result<(), EmfError> {
             let sub_entity_record = self.load_sub_entity(self.env().caller())?;
             let mut measurements = sub_entity_record.measurements;
-            measurements.add(value, self.env().block_timestamp())?;
+            measurements.add(value, self.env().block_timestamp(), SECS_IN_23H)?;
             self.sub_entities.try_insert(
                 self.env().caller(),
                 &SubEntity {
@@ -217,7 +251,36 @@ mod emf_contract {
         pub fn store_measurement_spike(&mut self, value: u128) -> Result<(), EmfError> {
             let sub_entity_record = self.load_sub_entity(self.env().caller())?;
             let mut spikes = sub_entity_record.spikes;
-            spikes.add(value, self.env().block_timestamp())?;
+
+            let too_much_spikes = if spikes.0.len() >= TOO_MUCH_SPIKES_COUNT {
+                // Unwrap is ok because new block timestamp cannot be less than in storage.
+                let time_diff = self
+                    .env()
+                    .block_timestamp()
+                    .checked_sub(spikes.0[spikes.0.len() - 1].timestamp)
+                    .unwrap();
+                // It means in last 10 spikes we have at least one diff between two
+                // nearest spikes which is more than TOO_MUCH_SPIKES_TIME_DIFF.
+                let mut interval_broken = false;
+                if time_diff <= TOO_MUCH_SPIKES_TIME_DIFF {
+                    for i in (spikes.0.len() - TOO_MUCH_SPIKES_COUNT + 1..spikes.0.len()).rev() {
+                        let spike_lt = &spikes.0[i - 1].timestamp;
+                        let spike_rt = &spikes.0[i].timestamp;
+                        if spike_rt - spike_lt > TOO_MUCH_SPIKES_TIME_DIFF {
+                            interval_broken = true;
+                            break;
+                        }
+                    }
+                    !interval_broken
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            spikes.add(value, self.env().block_timestamp(), SECS_IN_ONE_MINUTE)?;
+
             self.sub_entities.try_insert(
                 self.env().caller(),
                 &SubEntity {
@@ -228,12 +291,25 @@ mod emf_contract {
                     deleted: sub_entity_record.deleted,
                 },
             )?;
+
+            self.env().emit_event(NewSpike {
+                entity: sub_entity_record.entity,
+                sub_entity: self.env().caller(),
+                value,
+            });
+            if too_much_spikes {
+                self.env().emit_event(TooMuchSpikes {
+                    entity: sub_entity_record.entity,
+                    sub_entity: self.env().caller(),
+                });
+            }
+
             Ok(())
         }
 
         #[ink(message)]
         pub fn check_sub_entity(&mut self) -> Result<(), EmfError> {
-            let sub_entity_record = self.load_sub_entity(self.env().caller())?;
+            let _sub_entity_record = self.load_sub_entity(self.env().caller())?;
             todo!()
         }
 
@@ -388,6 +464,62 @@ mod emf_contract {
         #[ink::test]
         fn sub_entity_store_measurement_spikes() {
             generic_measurements_test(store_measurement_spike, get_spike)
+        }
+
+        /// We test everything about spikes events.
+        #[ink::test]
+        fn test_spike_events() {
+            let mut emf_contract = EmfContract::new();
+
+            let alice = default_accounts().alice;
+            let bob = default_accounts().bob;
+
+            set_sender(alice);
+            emf_contract.create_entity().unwrap();
+            emf_contract.create_sub_entity(bob, LOCATION.into()).unwrap();
+
+            set_sender(bob);
+
+            let mut timestamp = 1;
+            set_timestamp(timestamp);
+            emf_contract.store_measurement_spike(99).unwrap();
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            // Two events to create entity and sub-entity.
+            // And event about spike.
+            assert_eq!(3, emitted_events.len());
+
+            timestamp += TOO_MUCH_SPIKES_TIME_DIFF;
+            set_timestamp(timestamp);
+            emf_contract.store_measurement_spike(111).unwrap();
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            // One more event for measurement spike.
+            assert_eq!(3 + 1, emitted_events.len());
+
+            // We need more 8 spikes in a row to spawn too much spikes event.
+            for _ in 0..8 {
+                timestamp += TOO_MUCH_SPIKES_TIME_DIFF;
+                set_timestamp(timestamp);
+                emf_contract.store_measurement_spike(111).unwrap();
+            }
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            // +8 spikes events and +1 too much spike event.
+            assert_eq!(4 + 8 + 1, emitted_events.len());
+
+            // If there are more than 6m passed from last spike
+            // we don't have too much spikes event.
+            timestamp += TOO_MUCH_SPIKES_TIME_DIFF + 1;
+            set_timestamp(timestamp);
+            emf_contract.store_measurement_spike(111).unwrap();
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            assert_eq!(13 + 1, emitted_events.len());
+
+            // Test that we cannot store too much same events on-chain.
+            timestamp += SECS_IN_ONE_MINUTE - 1;
+            set_timestamp(timestamp);
+            let err = emf_contract.store_measurement_spike(111).unwrap_err();
+            assert_eq!(EmfError::MeasurementTooFast, err);
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            assert_eq!(14, emitted_events.len());
         }
 
         fn generic_measurements_test<WriteFn, ReadFn>(write_fn: WriteFn, read_fn: ReadFn)
