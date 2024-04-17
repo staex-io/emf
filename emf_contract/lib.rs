@@ -122,8 +122,6 @@ mod emf_contract {
             });
             Ok(())
         }
-
-        // todo: if sub entity was deleted restrict to add new measurements to it
     }
 
     #[cfg(test)]
