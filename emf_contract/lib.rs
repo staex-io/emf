@@ -7,17 +7,34 @@ mod emf_contract {
     #[ink(storage)]
     pub struct EmfContract {
         entities: Mapping<AccountId, Entity>,
+        sub_entities: Mapping<AccountId, SubEntity>,
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(StorageLayout))]
     pub struct Entity {}
 
+    #[ink::scale_derive(Encode, Decode, TypeInfo)]
+    #[cfg_attr(feature = "std", derive(StorageLayout))]
+    pub struct SubEntity {
+        entity: AccountId,
+    }
+
+    #[ink::scale_derive(Encode, Decode, TypeInfo)]
+    #[cfg_attr(feature = "std", derive(StorageLayout))]
+    #[cfg_attr(test, derive(Debug, PartialEq))]
+    pub enum EmfError {
+        EntityAlreadyExists,
+        EntityNotFound,
+        SubEntityAlreadyExists,
+    }
+
     impl EmfContract {
         #[ink(constructor)]
         pub fn new() -> Self {
             Self {
                 entities: Mapping::new(),
+                sub_entities: Mapping::new(),
             }
         }
 
@@ -27,16 +44,28 @@ mod emf_contract {
         }
 
         #[ink(message)]
-        pub fn create_entity(&mut self) -> Result<(), String> {
+        pub fn create_entity(&mut self) -> Result<(), EmfError> {
             if self.entities.get(self.env().caller()).is_some() {
-                return Err("entity is already exists".to_string());
+                return Err(EmfError::EntityAlreadyExists);
             }
             self.entities.insert(self.env().caller(), &Entity {});
             Ok(())
         }
 
         #[ink(message)]
-        pub fn create_sub_entity(&mut self) {}
+        pub fn create_sub_entity(&mut self, sub_entity: AccountId) -> Result<(), EmfError> {
+            self.entities.get(self.env().caller()).ok_or(EmfError::EntityNotFound)?;
+            if self.sub_entities.get(sub_entity).is_some() {
+                return Err(EmfError::SubEntityAlreadyExists);
+            }
+            self.sub_entities.insert(
+                sub_entity,
+                &SubEntity {
+                    entity: self.env().caller(),
+                },
+            );
+            Ok(())
+        }
 
         #[ink(message)]
         pub fn delete_sub_entity(&mut self) {}
@@ -56,11 +85,51 @@ mod emf_contract {
 
         /// We test a simple use case of our contract.
         #[ink::test]
-        fn it_works() {
+        fn create_entity() {
             let mut emf_contract = EmfContract::new();
-            set_sender(default_accounts().alice);
+
+            let alice = default_accounts().alice;
+            set_sender(alice);
             emf_contract.create_entity().unwrap();
-            assert!(emf_contract.entities.get(default_accounts().alice).is_some());
+            assert!(emf_contract.entities.get(alice).is_some());
+
+            let bob = default_accounts().bob;
+            set_sender(bob);
+            emf_contract.create_entity().unwrap();
+            assert!(emf_contract.entities.get(bob).is_some());
+
+            let charlie = default_accounts().charlie;
+            assert!(emf_contract.entities.get(charlie).is_none());
+        }
+
+        /// We test a simple use case of our contract.
+        #[ink::test]
+        fn create_sub_entity() {
+            let mut emf_contract = EmfContract::new();
+
+            // Alice is an entity.
+            let alice = default_accounts().alice;
+            // Bob is a sub-entity for Alice.
+            let bob = default_accounts().bob;
+
+            // Test that we cannot create sub-entity before creating entity.
+            set_sender(alice);
+            let err = emf_contract.create_sub_entity(bob).unwrap_err();
+            assert_eq!(EmfError::EntityNotFound, err,);
+
+            // Create entity.
+            set_sender(alice);
+            emf_contract.create_entity().unwrap();
+
+            // Test successful creation.
+            set_sender(alice);
+            emf_contract.create_sub_entity(bob).unwrap();
+            assert!(emf_contract.sub_entities.get(bob).is_some());
+
+            // Test that sub-entity cannot be created twice.
+            set_sender(alice);
+            let err = emf_contract.create_sub_entity(bob).unwrap_err();
+            assert_eq!(EmfError::SubEntityAlreadyExists, err);
         }
 
         fn default_accounts() -> ink::env::test::DefaultAccounts<ink::env::DefaultEnvironment> {
@@ -71,72 +140,4 @@ mod emf_contract {
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(sender);
         }
     }
-
-    // /// This is how you'd write end-to-end (E2E) or integration tests for ink! contracts.
-    // ///
-    // /// When running these you need to make sure that you:
-    // /// - Compile the tests with the `e2e-tests` feature flag enabled (`--features e2e-tests`)
-    // /// - Are running a Substrate node which contains `pallet-contracts` in the background
-    // #[cfg(all(test, feature = "e2e-tests"))]
-    // mod e2e_tests {
-    //     /// Imports all the definitions from the outer scope so we can use them here.
-    //     use super::*;
-
-    //     /// A helper function used for calling contract messages.
-    //     use ink_e2e::ContractsBackend;
-
-    //     /// The End-to-End test `Result` type.
-    //     type E2EResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
-
-    //     /// We test that we can upload and instantiate the contract using its default constructor.
-    //     #[ink_e2e::test]
-    //     async fn default_works(mut client: ink_e2e::Client<C, E>) -> E2EResult<()> {
-    //         // Given
-    //         let mut constructor = EmfContractRef::default();
-
-    //         // When
-    //         let contract = client
-    //             .instantiate("emf_contract", &ink_e2e::alice(), &mut constructor)
-    //             .submit()
-    //             .await
-    //             .expect("instantiate failed");
-    //         let call_builder = contract.call_builder::<EmfContract>();
-
-    //         // Then
-    //         let get = call_builder.get();
-    //         let get_result = client.call(&ink_e2e::alice(), &get).dry_run().await?;
-    //         assert!(!get_result.return_value());
-
-    //         Ok(())
-    //     }
-
-    //     /// We test that we can read and write a value from the on-chain contract contract.
-    //     #[ink_e2e::test]
-    //     async fn it_works(mut client: ink_e2e::Client<C, E>) -> E2EResult<()> {
-    //         // Given
-    //         let mut constructor = EmfContractRef::new(false);
-    //         let contract = client
-    //             .instantiate("emf_contract", &ink_e2e::bob(), &mut constructor)
-    //             .submit()
-    //             .await
-    //             .expect("instantiate failed");
-    //         let mut call_builder = contract.call_builder::<EmfContract>();
-
-    //         let get = call_builder.get();
-    //         let get_result = client.call(&ink_e2e::bob(), &get).dry_run().await?;
-    //         assert!(!get_result.return_value());
-
-    //         // When
-    //         let flip = call_builder.flip();
-    //         let _flip_result =
-    //             client.call(&ink_e2e::bob(), &flip).submit().await.expect("flip failed");
-
-    //         // Then
-    //         let get = call_builder.get();
-    //         let get_result = client.call(&ink_e2e::bob(), &get).dry_run().await?;
-    //         assert!(get_result.return_value());
-
-    //         Ok(())
-    //     }
-    // }
 }
