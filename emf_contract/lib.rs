@@ -61,6 +61,17 @@ mod emf_contract {
         SubEntityAlreadyExists,
         SubEntityNotFound,
         SubEntityBelongingFailed,
+        StorageExceeded,
+        Unknown,
+    }
+
+    impl From<ink_env::Error> for EmfError {
+        fn from(value: ink_env::Error) -> Self {
+            match value {
+                ink_env::Error::BufferTooSmall => Self::StorageExceeded,
+                _ => Self::Unknown,
+            }
+        }
     }
 
     impl EmfContract {
@@ -77,7 +88,7 @@ mod emf_contract {
             if self.entities.get(self.env().caller()).is_some() {
                 return Err(EmfError::EntityAlreadyExists);
             }
-            self.entities.insert(self.env().caller(), &Entity {});
+            self.entities.try_insert(self.env().caller(), &Entity {})?;
             self.env().emit_event(EntityCreated {
                 entity: self.env().caller(),
             });
@@ -94,14 +105,14 @@ mod emf_contract {
             if self.sub_entities.get(sub_entity).is_some() {
                 return Err(EmfError::SubEntityAlreadyExists);
             }
-            self.sub_entities.insert(
+            self.sub_entities.try_insert(
                 sub_entity,
                 &SubEntity {
                     entity: self.env().caller(),
                     location: location.clone(),
                     deleted: false,
                 },
-            );
+            )?;
             self.env().emit_event(SubEntityCreated {
                 entity: self.env().caller(),
                 sub_entity,
@@ -118,19 +129,34 @@ mod emf_contract {
             if self.env().caller() != sub_entity_record.entity {
                 return Err(EmfError::SubEntityBelongingFailed);
             }
-            self.sub_entities.insert(
+            self.sub_entities.try_insert(
                 sub_entity,
                 &SubEntity {
                     entity: sub_entity_record.entity,
                     location: sub_entity_record.location,
                     deleted: true,
                 },
-            );
+            )?;
             self.env().emit_event(SubEntityDeleted {
                 entity: sub_entity_record.entity,
                 sub_entity,
             });
             Ok(())
+        }
+
+        #[ink(message)]
+        pub fn store_measurement(&mut self) -> Result<(), EmfError> {
+            todo!()
+        }
+
+        #[ink(message)]
+        pub fn store_measurement_spike(&mut self) -> Result<(), EmfError> {
+            todo!()
+        }
+
+        #[ink(message)]
+        pub fn check_sub_entity(&mut self) -> Result<(), EmfError> {
+            todo!()
         }
     }
 
