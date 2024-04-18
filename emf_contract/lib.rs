@@ -5,7 +5,8 @@ mod emf_contract {
     use ink::prelude::{collections::VecDeque, string::String};
     use ink::storage::{traits::StorageLayout, Mapping};
 
-    const AVG_DAYS_IN_MONTH: usize = 30;
+    // Average days in month.
+    const DAYS_IN_MONTH: usize = 30;
     const SECS_IN_23H: u64 = 82_800;
     const SECS_IN_ONE_MINUTE: u64 = 60;
 
@@ -21,13 +22,14 @@ mod emf_contract {
 
     #[ink(storage)]
     pub struct EmfContract {
+        pub threshold: u128,
         pub entities: Mapping<AccountId, Entity>,
         pub sub_entities: Mapping<AccountId, SubEntity>,
     }
 
     impl Default for EmfContract {
         fn default() -> Self {
-            EmfContract::new()
+            EmfContract::new(10)
         }
     }
 
@@ -97,6 +99,7 @@ mod emf_contract {
         SubEntityAlreadyDeleted,
         StorageExceeded,
         MeasurementTooFast,
+        NotEnoughRecords,
         Unknown,
     }
 
@@ -122,7 +125,7 @@ mod emf_contract {
 
     impl Default for Measurements {
         fn default() -> Self {
-            Self(VecDeque::with_capacity(AVG_DAYS_IN_MONTH))
+            Self(VecDeque::with_capacity(DAYS_IN_MONTH))
         }
     }
 
@@ -147,7 +150,7 @@ mod emf_contract {
                 }
             }
             let mut cap_exceeded = false;
-            if self.0.len() == AVG_DAYS_IN_MONTH {
+            if self.0.len() == DAYS_IN_MONTH {
                 cap_exceeded = true;
                 self.0.pop_front();
             }
@@ -158,8 +161,9 @@ mod emf_contract {
 
     impl EmfContract {
         #[ink(constructor)]
-        pub fn new() -> Self {
+        pub fn new(threshold: u128) -> Self {
             Self {
+                threshold,
                 entities: Mapping::new(),
                 sub_entities: Mapping::new(),
             }
@@ -308,9 +312,18 @@ mod emf_contract {
         }
 
         #[ink(message)]
-        pub fn check_sub_entity(&mut self) -> Result<(), EmfError> {
-            let _sub_entity_record = self.load_sub_entity(self.env().caller())?;
-            todo!()
+        pub fn check_sub_entity(&mut self, sub_entity: AccountId) -> Result<bool, EmfError> {
+            let sub_entity_record = self.load_sub_entity(sub_entity)?;
+            if sub_entity_record.measurements.0.len() != DAYS_IN_MONTH {
+                return Err(EmfError::NotEnoughRecords);
+            }
+            for i in 0..DAYS_IN_MONTH {
+                let record = sub_entity_record.measurements.0.get(i).ok_or(EmfError::Unknown)?;
+                if record.value > self.threshold {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
         }
 
         fn load_sub_entity(&self, sub_entity: AccountId) -> Result<SubEntity, EmfError> {
@@ -341,7 +354,7 @@ mod emf_contract {
         /// We test entity creation.
         #[ink::test]
         fn create_entity() {
-            let mut emf_contract = EmfContract::new();
+            let mut emf_contract = EmfContract::default();
 
             let alice = default_accounts().alice;
             set_sender(alice);
@@ -365,7 +378,7 @@ mod emf_contract {
         /// We test sub-entity creation.
         #[ink::test]
         fn create_sub_entity() {
-            let mut emf_contract = EmfContract::new();
+            let mut emf_contract = EmfContract::default();
 
             // Alice is an entity.
             let alice = default_accounts().alice;
@@ -403,7 +416,7 @@ mod emf_contract {
         /// We test sub-entity deletion.
         #[ink::test]
         fn delete_sub_entity() {
-            let mut emf_contract = EmfContract::new();
+            let mut emf_contract = EmfContract::default();
 
             // Alice is an entity.
             let alice = default_accounts().alice;
@@ -469,7 +482,7 @@ mod emf_contract {
         /// We test everything about spikes events.
         #[ink::test]
         fn test_spike_events() {
-            let mut emf_contract = EmfContract::new();
+            let mut emf_contract = EmfContract::default();
 
             let alice = default_accounts().alice;
             let bob = default_accounts().bob;
@@ -522,12 +535,73 @@ mod emf_contract {
             assert_eq!(14, emitted_events.len());
         }
 
+        /// We test check sub-entity smart contract method.
+        #[ink::test]
+        fn test_check_sub_entities_general_flow() {
+            let mut emf_contract = EmfContract::default();
+
+            let alice = default_accounts().alice;
+            let bob = default_accounts().bob;
+
+            set_sender(alice);
+            emf_contract.create_entity().unwrap();
+
+            let err = emf_contract.check_sub_entity(bob).unwrap_err();
+            assert_eq!(EmfError::SubEntityNotFound, err);
+
+            emf_contract.create_sub_entity(bob, LOCATION.into()).unwrap();
+
+            let err = emf_contract.check_sub_entity(bob).unwrap_err();
+            assert_eq!(EmfError::NotEnoughRecords, err);
+
+            set_sender(bob);
+            let mut timestamp = 0;
+            for _ in 0..30 {
+                timestamp += SECS_IN_23H;
+                set_timestamp(timestamp);
+                emf_contract.store_measurement(2).unwrap();
+            }
+
+            set_sender(alice);
+
+            assert!(emf_contract.check_sub_entity(bob).unwrap());
+
+            emf_contract.delete_sub_entity(bob).unwrap();
+
+            let err = emf_contract.check_sub_entity(bob).unwrap_err();
+            assert_eq!(EmfError::SubEntityAlreadyDeleted, err);
+        }
+
+        /// We test check sub-entity smart contract method in bad case.
+        #[ink::test]
+        fn test_check_sub_entities_bad_case() {
+            let mut emf_contract = EmfContract::default();
+
+            let alice = default_accounts().alice;
+            let bob = default_accounts().bob;
+
+            set_sender(alice);
+            emf_contract.create_entity().unwrap();
+            emf_contract.create_sub_entity(bob, LOCATION.into()).unwrap();
+
+            set_sender(bob);
+            let mut timestamp = 0;
+            for _ in 0..30 {
+                timestamp += SECS_IN_23H;
+                set_timestamp(timestamp);
+                emf_contract.store_measurement(11).unwrap();
+            }
+
+            set_sender(alice);
+            assert!(!emf_contract.check_sub_entity(bob).unwrap());
+        }
+
         fn generic_measurements_test<WriteFn, ReadFn>(write_fn: WriteFn, read_fn: ReadFn)
         where
             WriteFn: Fn(&mut EmfContract, u128) -> Result<(), EmfError>,
             ReadFn: Fn(&EmfContract, AccountId, usize) -> Measurement,
         {
-            let mut emf_contract = EmfContract::new();
+            let mut emf_contract = EmfContract::default();
 
             let alice = default_accounts().alice;
             let bob = default_accounts().bob;
