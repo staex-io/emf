@@ -20,11 +20,18 @@ mod emf_contract {
     // by smart contract method execution call.
     const TOO_MUCH_SPIKES_COUNT: usize = 9;
 
+    type MeasurementType = u128;
+    type CertificateIndexType = u128;
+
     #[ink(storage)]
     pub struct EmfContract {
-        pub threshold: u128,
+        pub threshold: MeasurementType,
+
         pub entities: Mapping<AccountId, Entity>,
         pub sub_entities: Mapping<AccountId, SubEntity>,
+
+        current_certificate_index: CertificateIndexType,
+        pub certificates: Mapping<CertificateIndexType, Certificate>,
     }
 
     impl Default for EmfContract {
@@ -42,9 +49,28 @@ mod emf_contract {
     pub struct SubEntity {
         pub entity: AccountId,
         pub location: String,
-        pub measurements: Measurements,
-        pub spikes: Measurements,
+        pub measurements: BoundedVec<Measurement>,
+        pub spikes: BoundedVec<Measurement>,
         pub deleted: bool,
+    }
+
+    // todo: test every field
+    #[ink::scale_derive(Encode, Decode, TypeInfo)]
+    #[cfg_attr(feature = "std", derive(StorageLayout))]
+    pub struct Certificate {
+        pub index: CertificateIndexType,
+
+        pub entity: AccountId,
+        pub sub_entity: AccountId,
+
+        pub status: CertificateStatus,
+
+        pub min_measurement: Measurement,
+        pub max_measurement: Measurement,
+        pub avg_measurement: MeasurementType,
+
+        pub first_measurement_timestamp: u64,
+        pub last_measurement_timestamp: u64,
     }
 
     #[ink(event)]
@@ -76,11 +102,21 @@ mod emf_contract {
         pub entity: AccountId,
         #[ink(topic)]
         pub sub_entity: AccountId,
-        pub value: u128,
+        pub value: MeasurementType,
     }
 
     #[ink(event)]
     pub struct TooMuchSpikes {
+        #[ink(topic)]
+        pub entity: AccountId,
+        #[ink(topic)]
+        pub sub_entity: AccountId,
+    }
+
+    // todo: test it and every field
+    #[ink(event)]
+    pub struct CertificateIssued {
+        pub index: CertificateIndexType,
         #[ink(topic)]
         pub entity: AccountId,
         #[ink(topic)]
@@ -114,28 +150,55 @@ mod emf_contract {
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(StorageLayout))]
-    pub struct Measurement {
-        pub value: u128,
-        pub timestamp: u64,
+    #[cfg_attr(test, derive(Debug, PartialEq))]
+    pub enum CertificateStatus {
+        Ok,
+        Bad,
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(StorageLayout))]
-    pub struct Measurements(VecDeque<Measurement>);
+    pub struct Measurement {
+        pub value: MeasurementType,
+        pub timestamp: u64,
+    }
 
-    impl Default for Measurements {
+    impl Measurement {
+        pub fn new(value: MeasurementType, timestamp: u64) -> Self {
+            Self { value, timestamp }
+        }
+    }
+
+    impl TimeConscious for Measurement {
+        fn timestamp(&self) -> u64 {
+            self.timestamp
+        }
+    }
+
+    pub trait TimeConscious {
+        fn timestamp(&self) -> u64;
+    }
+
+    #[ink::scale_derive(Encode, Decode, TypeInfo)]
+    #[cfg_attr(feature = "std", derive(StorageLayout))]
+    pub struct BoundedVec<T>(VecDeque<T>)
+    where
+        T: TimeConscious;
+
+    impl<T> Default for BoundedVec<T>
+    where
+        T: TimeConscious,
+    {
         fn default() -> Self {
             Self(VecDeque::with_capacity(DAYS_IN_MONTH))
         }
     }
 
-    impl Measurements {
-        pub fn add(
-            &mut self,
-            value: u128,
-            timestamp: u64,
-            min_time_diff: u64,
-        ) -> Result<bool, EmfError> {
+    impl<T> BoundedVec<T>
+    where
+        T: TimeConscious,
+    {
+        pub fn add(&mut self, data: T, min_time_diff: u64) -> Result<bool, EmfError> {
             // If there are values in vector.
             // We need to check that previous value was not wrote
             // in less than 23h.
@@ -144,7 +207,8 @@ mod emf_contract {
             if !self.0.is_empty() {
                 // Unwrap is ok because we checked length.
                 // Last unwrap is ok as new timestamp cannot be less than in storage.
-                let diff = timestamp.checked_sub(self.0.back().unwrap().timestamp).unwrap();
+                let diff =
+                    data.timestamp().checked_sub(self.0.back().unwrap().timestamp()).unwrap();
                 if diff < min_time_diff {
                     return Err(EmfError::MeasurementTooFast);
                 }
@@ -154,18 +218,20 @@ mod emf_contract {
                 cap_exceeded = true;
                 self.0.pop_front();
             }
-            self.0.push_back(Measurement { value, timestamp });
+            self.0.push_back(data);
             Ok(cap_exceeded)
         }
     }
 
     impl EmfContract {
         #[ink(constructor)]
-        pub fn new(threshold: u128) -> Self {
+        pub fn new(threshold: MeasurementType) -> Self {
             Self {
                 threshold,
                 entities: Mapping::new(),
                 sub_entities: Mapping::new(),
+                current_certificate_index: 0,
+                certificates: Mapping::new(),
             }
         }
 
@@ -196,8 +262,8 @@ mod emf_contract {
                 &SubEntity {
                     entity: self.env().caller(),
                     location: location.clone(),
-                    measurements: Measurements::default(),
-                    spikes: Measurements::default(),
+                    measurements: BoundedVec::default(),
+                    spikes: BoundedVec::default(),
                     deleted: false,
                 },
             )?;
@@ -234,10 +300,10 @@ mod emf_contract {
         }
 
         #[ink(message)]
-        pub fn store_measurement(&mut self, value: u128) -> Result<(), EmfError> {
+        pub fn store_measurement(&mut self, value: MeasurementType) -> Result<(), EmfError> {
             let sub_entity_record = self.load_sub_entity(self.env().caller())?;
             let mut measurements = sub_entity_record.measurements;
-            measurements.add(value, self.env().block_timestamp(), SECS_IN_23H)?;
+            measurements.add(Measurement::new(value, self.env().block_timestamp()), SECS_IN_23H)?;
             self.sub_entities.try_insert(
                 self.env().caller(),
                 &SubEntity {
@@ -252,7 +318,7 @@ mod emf_contract {
         }
 
         #[ink(message)]
-        pub fn store_measurement_spike(&mut self, value: u128) -> Result<(), EmfError> {
+        pub fn store_measurement_spike(&mut self, value: MeasurementType) -> Result<(), EmfError> {
             let sub_entity_record = self.load_sub_entity(self.env().caller())?;
             let mut spikes = sub_entity_record.spikes;
 
@@ -283,7 +349,8 @@ mod emf_contract {
                 false
             };
 
-            spikes.add(value, self.env().block_timestamp(), SECS_IN_ONE_MINUTE)?;
+            spikes
+                .add(Measurement::new(value, self.env().block_timestamp()), SECS_IN_ONE_MINUTE)?;
 
             self.sub_entities.try_insert(
                 self.env().caller(),
@@ -312,7 +379,7 @@ mod emf_contract {
         }
 
         #[ink(message)]
-        pub fn check_sub_entity(&mut self, sub_entity: AccountId) -> Result<bool, EmfError> {
+        pub fn check_sub_entity(&self, sub_entity: AccountId) -> Result<bool, EmfError> {
             let sub_entity_record = self.load_sub_entity(sub_entity)?;
             if sub_entity_record.measurements.0.len() != DAYS_IN_MONTH {
                 return Err(EmfError::NotEnoughRecords);
@@ -324,6 +391,20 @@ mod emf_contract {
                 }
             }
             Ok(true)
+        }
+
+        #[ink(message)]
+        pub fn issue_certificate(
+            &mut self,
+            sub_entity: AccountId,
+        ) -> Result<CertificateIndexType, EmfError> {
+            let sub_entity_record = self.load_sub_entity(sub_entity)?;
+            if self.env().caller() != sub_entity_record.entity {
+                // todo: test it
+                return Err(EmfError::SubEntityBelongingFailed);
+            }
+            self.current_certificate_index += 1; // todo: test it
+            Ok(self.current_certificate_index)
         }
 
         fn load_sub_entity(&self, sub_entity: AccountId) -> Result<SubEntity, EmfError> {
@@ -596,9 +677,33 @@ mod emf_contract {
             assert!(!emf_contract.check_sub_entity(bob).unwrap());
         }
 
+        /// We test successful certification issue.
+        #[ink::test]
+        fn test_issue_certificate_ok() {
+            let mut emf_contract = EmfContract::default();
+
+            let alice = default_accounts().alice;
+            let bob = default_accounts().bob;
+
+            set_sender(alice);
+            emf_contract.create_entity().unwrap();
+            emf_contract.create_sub_entity(bob, LOCATION.into()).unwrap();
+
+            set_sender(bob);
+            let mut timestamp = 0;
+            for _ in 0..30 {
+                timestamp += SECS_IN_23H;
+                set_timestamp(timestamp);
+                emf_contract.store_measurement(5).unwrap();
+            }
+
+            set_sender(alice);
+            emf_contract.issue_certificate(bob).unwrap();
+        }
+
         fn generic_measurements_test<WriteFn, ReadFn>(write_fn: WriteFn, read_fn: ReadFn)
         where
-            WriteFn: Fn(&mut EmfContract, u128) -> Result<(), EmfError>,
+            WriteFn: Fn(&mut EmfContract, MeasurementType) -> Result<(), EmfError>,
             ReadFn: Fn(&EmfContract, AccountId, usize) -> Measurement,
         {
             let mut emf_contract = EmfContract::default();
@@ -647,13 +752,16 @@ mod emf_contract {
             assert_eq!(EmfError::SubEntityAlreadyDeleted, err);
         }
 
-        fn store_measurement(emf_contract: &mut EmfContract, value: u128) -> Result<(), EmfError> {
+        fn store_measurement(
+            emf_contract: &mut EmfContract,
+            value: MeasurementType,
+        ) -> Result<(), EmfError> {
             emf_contract.store_measurement(value)
         }
 
         fn store_measurement_spike(
             emf_contract: &mut EmfContract,
-            value: u128,
+            value: MeasurementType,
         ) -> Result<(), EmfError> {
             emf_contract.store_measurement_spike(value)
         }
