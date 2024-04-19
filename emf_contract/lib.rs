@@ -54,7 +54,6 @@ mod emf_contract {
         pub deleted: bool,
     }
 
-    // todo: test every field
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(StorageLayout))]
     pub struct Certificate {
@@ -65,8 +64,8 @@ mod emf_contract {
 
         pub status: CertificateStatus,
 
-        pub min_measurement: Measurement,
-        pub max_measurement: Measurement,
+        pub min_measurement: MeasurementType,
+        pub max_measurement: MeasurementType,
         pub avg_measurement: MeasurementType,
 
         pub first_measurement_timestamp: u64,
@@ -113,7 +112,12 @@ mod emf_contract {
         pub sub_entity: AccountId,
     }
 
-    // todo: test it and every field
+    #[ink(event)]
+    pub struct CertificateReady {
+        pub entity: AccountId,
+        pub sub_entity: AccountId,
+    }
+
     #[ink(event)]
     pub struct CertificateIssued {
         pub index: CertificateIndexType,
@@ -213,13 +217,15 @@ mod emf_contract {
                     return Err(EmfError::MeasurementTooFast);
                 }
             }
-            let mut cap_exceeded = false;
             if self.0.len() == DAYS_IN_MONTH {
-                cap_exceeded = true;
                 self.0.pop_front();
             }
+            let mut cap_reached = false;
+            if self.0.len() == DAYS_IN_MONTH - 1 {
+                cap_reached = true;
+            }
             self.0.push_back(data);
-            Ok(cap_exceeded)
+            Ok(cap_reached)
         }
     }
 
@@ -303,7 +309,8 @@ mod emf_contract {
         pub fn store_measurement(&mut self, value: MeasurementType) -> Result<(), EmfError> {
             let sub_entity_record = self.load_sub_entity(self.env().caller())?;
             let mut measurements = sub_entity_record.measurements;
-            measurements.add(Measurement::new(value, self.env().block_timestamp()), SECS_IN_23H)?;
+            let cap_reached = measurements
+                .add(Measurement::new(value, self.env().block_timestamp()), SECS_IN_23H)?;
             self.sub_entities.try_insert(
                 self.env().caller(),
                 &SubEntity {
@@ -314,6 +321,12 @@ mod emf_contract {
                     deleted: sub_entity_record.deleted,
                 },
             )?;
+            if cap_reached {
+                self.env().emit_event(CertificateReady {
+                    entity: sub_entity_record.entity,
+                    sub_entity: self.env().caller(),
+                });
+            }
             Ok(())
         }
 
@@ -384,9 +397,8 @@ mod emf_contract {
             if sub_entity_record.measurements.0.len() != DAYS_IN_MONTH {
                 return Err(EmfError::NotEnoughRecords);
             }
-            for i in 0..DAYS_IN_MONTH {
-                let record = sub_entity_record.measurements.0.get(i).ok_or(EmfError::Unknown)?;
-                if record.value > self.threshold {
+            for measurement in sub_entity_record.measurements.0 {
+                if measurement.value > self.threshold {
                     return Ok(false);
                 }
             }
@@ -400,11 +412,70 @@ mod emf_contract {
         ) -> Result<CertificateIndexType, EmfError> {
             let sub_entity_record = self.load_sub_entity(sub_entity)?;
             if self.env().caller() != sub_entity_record.entity {
-                // todo: test it
                 return Err(EmfError::SubEntityBelongingFailed);
             }
-            self.current_certificate_index += 1; // todo: test it
-            Ok(self.current_certificate_index)
+            if sub_entity_record.measurements.0.len() != DAYS_IN_MONTH {
+                return Err(EmfError::NotEnoughRecords);
+            }
+
+            self.current_certificate_index += 1;
+            let index = self.current_certificate_index;
+
+            let mut status = CertificateStatus::Ok;
+            let mut min_measurement: MeasurementType = MeasurementType::MAX;
+            let mut max_measurement: MeasurementType = MeasurementType::MIN;
+            let mut avg_measurement: MeasurementType = 0;
+            for measurement in &sub_entity_record.measurements.0 {
+                if measurement.value > self.threshold {
+                    status = CertificateStatus::Bad;
+                }
+                if measurement.value < min_measurement {
+                    min_measurement = measurement.value;
+                }
+                if measurement.value > max_measurement {
+                    max_measurement = measurement.value;
+                }
+                avg_measurement += measurement.value;
+            }
+            avg_measurement /= DAYS_IN_MONTH as u128;
+
+            let first_measurement_timestamp = sub_entity_record.measurements.0[0].timestamp;
+            let last_measurement_timestamp =
+                sub_entity_record.measurements.0[DAYS_IN_MONTH - 1].timestamp;
+
+            self.certificates.try_insert(
+                index,
+                &Certificate {
+                    index,
+                    entity: self.env().caller(),
+                    sub_entity,
+                    status,
+                    min_measurement,
+                    max_measurement,
+                    avg_measurement,
+                    first_measurement_timestamp,
+                    last_measurement_timestamp,
+                },
+            )?;
+
+            self.sub_entities.try_insert(
+                sub_entity,
+                &SubEntity {
+                    entity: sub_entity_record.entity,
+                    location: sub_entity_record.location,
+                    measurements: BoundedVec::default(),
+                    spikes: BoundedVec::default(),
+                    deleted: sub_entity_record.deleted,
+                },
+            )?;
+
+            self.env().emit_event(CertificateIssued {
+                index,
+                entity: self.env().caller(),
+                sub_entity,
+            });
+
+            Ok(index)
         }
 
         fn load_sub_entity(&self, sub_entity: AccountId) -> Result<SubEntity, EmfError> {
@@ -677,9 +748,73 @@ mod emf_contract {
             assert!(!emf_contract.check_sub_entity(bob).unwrap());
         }
 
-        /// We test successful certification issue.
+        /// We test successful certification issue with ok status.
         #[ink::test]
         fn test_issue_certificate_ok() {
+            let mut emf_contract = EmfContract::default();
+
+            let alice = default_accounts().alice;
+            let bob = default_accounts().bob;
+
+            set_sender(alice);
+            emf_contract.create_entity().unwrap();
+            emf_contract.create_sub_entity(bob, LOCATION.into()).unwrap();
+
+            set_sender(default_accounts().charlie);
+            let err = emf_contract.issue_certificate(bob).unwrap_err();
+            assert_eq!(EmfError::SubEntityBelongingFailed, err);
+
+            set_sender(alice);
+
+            let err = emf_contract.issue_certificate(bob).unwrap_err();
+            assert_eq!(EmfError::NotEnoughRecords, err);
+
+            set_sender(bob);
+            let mut timestamp = 0;
+            for i in 0..30 {
+                let measurement: MeasurementType = if i < 10 {
+                    4
+                } else if (10..20).contains(&i) {
+                    5
+                } else {
+                    6
+                };
+                timestamp += SECS_IN_23H;
+                set_timestamp(timestamp);
+                emf_contract.store_measurement(measurement).unwrap();
+            }
+            emf_contract.store_measurement_spike(111).unwrap();
+
+            set_sender(alice);
+            assert_eq!(0, emf_contract.current_certificate_index);
+            let index = emf_contract.issue_certificate(bob).unwrap();
+            assert_eq!(1, emf_contract.current_certificate_index);
+
+            let certificate = emf_contract.certificates.get(index).unwrap();
+            assert_eq!(certificate.index, 1);
+            assert_eq!(certificate.entity, alice);
+            assert_eq!(certificate.sub_entity, bob);
+            assert_eq!(certificate.status, CertificateStatus::Ok);
+            assert_eq!(certificate.min_measurement, 4);
+            assert_eq!(certificate.max_measurement, 6);
+            assert_eq!(certificate.avg_measurement, 5);
+            assert_eq!(certificate.first_measurement_timestamp, timestamp - SECS_IN_23H * 29);
+            assert_eq!(certificate.last_measurement_timestamp, timestamp);
+
+            assert!(emf_contract.sub_entities.get(bob).unwrap().measurements.0.is_empty());
+            assert!(emf_contract.sub_entities.get(bob).unwrap().spikes.0.is_empty());
+
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            assert_eq!(5, emitted_events.len());
+            let certificated_issued: CertificateIssued = decode_event(&emitted_events[4]);
+            assert_eq!(certificated_issued.index, 1);
+            assert_eq!(certificated_issued.entity, alice);
+            assert_eq!(certificated_issued.sub_entity, bob);
+        }
+
+        /// We test successful certification issue with bad status.
+        #[ink::test]
+        fn test_issue_certificate_bad() {
             let mut emf_contract = EmfContract::default();
 
             let alice = default_accounts().alice;
@@ -694,11 +829,19 @@ mod emf_contract {
             for _ in 0..30 {
                 timestamp += SECS_IN_23H;
                 set_timestamp(timestamp);
-                emf_contract.store_measurement(5).unwrap();
+                emf_contract.store_measurement(55).unwrap();
             }
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            assert_eq!(3, emitted_events.len());
+            let certificated_ready: CertificateReady = decode_event(&emitted_events[2]);
+            assert_eq!(certificated_ready.entity, alice);
+            assert_eq!(certificated_ready.sub_entity, bob);
 
             set_sender(alice);
             emf_contract.issue_certificate(bob).unwrap();
+
+            let certificate = emf_contract.certificates.get(1).unwrap();
+            assert_eq!(certificate.status, CertificateStatus::Bad);
         }
 
         fn generic_measurements_test<WriteFn, ReadFn>(write_fn: WriteFn, read_fn: ReadFn)
