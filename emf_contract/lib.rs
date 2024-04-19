@@ -20,11 +20,18 @@ mod emf_contract {
     // by smart contract method execution call.
     const TOO_MUCH_SPIKES_COUNT: usize = 9;
 
+    type MeasurementType = u128;
+    type CertificateIndexType = u128;
+
     #[ink(storage)]
     pub struct EmfContract {
-        pub threshold: u128,
+        pub threshold: MeasurementType,
+
         pub entities: Mapping<AccountId, Entity>,
         pub sub_entities: Mapping<AccountId, SubEntity>,
+
+        current_certificate_index: CertificateIndexType,
+        pub certificates: Mapping<CertificateIndexType, Certificate>,
     }
 
     impl Default for EmfContract {
@@ -42,9 +49,27 @@ mod emf_contract {
     pub struct SubEntity {
         pub entity: AccountId,
         pub location: String,
-        pub measurements: Measurements,
-        pub spikes: Measurements,
+        pub measurements: BoundedVec<Measurement>,
+        pub spikes: BoundedVec<Measurement>,
         pub deleted: bool,
+    }
+
+    #[ink::scale_derive(Encode, Decode, TypeInfo)]
+    #[cfg_attr(feature = "std", derive(StorageLayout))]
+    pub struct Certificate {
+        pub index: CertificateIndexType,
+
+        pub entity: AccountId,
+        pub sub_entity: AccountId,
+
+        pub status: CertificateStatus,
+
+        pub min_measurement: MeasurementType,
+        pub max_measurement: MeasurementType,
+        pub avg_measurement: MeasurementType,
+
+        pub first_measurement_timestamp: u64,
+        pub last_measurement_timestamp: u64,
     }
 
     #[ink(event)]
@@ -76,11 +101,26 @@ mod emf_contract {
         pub entity: AccountId,
         #[ink(topic)]
         pub sub_entity: AccountId,
-        pub value: u128,
+        pub value: MeasurementType,
     }
 
     #[ink(event)]
     pub struct TooMuchSpikes {
+        #[ink(topic)]
+        pub entity: AccountId,
+        #[ink(topic)]
+        pub sub_entity: AccountId,
+    }
+
+    #[ink(event)]
+    pub struct CertificateReady {
+        pub entity: AccountId,
+        pub sub_entity: AccountId,
+    }
+
+    #[ink(event)]
+    pub struct CertificateIssued {
+        pub index: CertificateIndexType,
         #[ink(topic)]
         pub entity: AccountId,
         #[ink(topic)]
@@ -114,28 +154,55 @@ mod emf_contract {
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(StorageLayout))]
-    pub struct Measurement {
-        pub value: u128,
-        pub timestamp: u64,
+    #[cfg_attr(test, derive(Debug, PartialEq))]
+    pub enum CertificateStatus {
+        Ok,
+        Bad,
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(StorageLayout))]
-    pub struct Measurements(VecDeque<Measurement>);
+    pub struct Measurement {
+        pub value: MeasurementType,
+        pub timestamp: u64,
+    }
 
-    impl Default for Measurements {
+    impl Measurement {
+        pub fn new(value: MeasurementType, timestamp: u64) -> Self {
+            Self { value, timestamp }
+        }
+    }
+
+    impl TimeConscious for Measurement {
+        fn timestamp(&self) -> u64 {
+            self.timestamp
+        }
+    }
+
+    pub trait TimeConscious {
+        fn timestamp(&self) -> u64;
+    }
+
+    #[ink::scale_derive(Encode, Decode, TypeInfo)]
+    #[cfg_attr(feature = "std", derive(StorageLayout))]
+    pub struct BoundedVec<T>(VecDeque<T>)
+    where
+        T: TimeConscious;
+
+    impl<T> Default for BoundedVec<T>
+    where
+        T: TimeConscious,
+    {
         fn default() -> Self {
             Self(VecDeque::with_capacity(DAYS_IN_MONTH))
         }
     }
 
-    impl Measurements {
-        pub fn add(
-            &mut self,
-            value: u128,
-            timestamp: u64,
-            min_time_diff: u64,
-        ) -> Result<bool, EmfError> {
+    impl<T> BoundedVec<T>
+    where
+        T: TimeConscious,
+    {
+        pub fn add(&mut self, data: T, min_time_diff: u64) -> Result<bool, EmfError> {
             // If there are values in vector.
             // We need to check that previous value was not wrote
             // in less than 23h.
@@ -144,28 +211,33 @@ mod emf_contract {
             if !self.0.is_empty() {
                 // Unwrap is ok because we checked length.
                 // Last unwrap is ok as new timestamp cannot be less than in storage.
-                let diff = timestamp.checked_sub(self.0.back().unwrap().timestamp).unwrap();
+                let diff =
+                    data.timestamp().checked_sub(self.0.back().unwrap().timestamp()).unwrap();
                 if diff < min_time_diff {
                     return Err(EmfError::MeasurementTooFast);
                 }
             }
-            let mut cap_exceeded = false;
             if self.0.len() == DAYS_IN_MONTH {
-                cap_exceeded = true;
                 self.0.pop_front();
             }
-            self.0.push_back(Measurement { value, timestamp });
-            Ok(cap_exceeded)
+            let mut cap_reached = false;
+            if self.0.len() == DAYS_IN_MONTH - 1 {
+                cap_reached = true;
+            }
+            self.0.push_back(data);
+            Ok(cap_reached)
         }
     }
 
     impl EmfContract {
         #[ink(constructor)]
-        pub fn new(threshold: u128) -> Self {
+        pub fn new(threshold: MeasurementType) -> Self {
             Self {
                 threshold,
                 entities: Mapping::new(),
                 sub_entities: Mapping::new(),
+                current_certificate_index: 0,
+                certificates: Mapping::new(),
             }
         }
 
@@ -196,8 +268,8 @@ mod emf_contract {
                 &SubEntity {
                     entity: self.env().caller(),
                     location: location.clone(),
-                    measurements: Measurements::default(),
-                    spikes: Measurements::default(),
+                    measurements: BoundedVec::default(),
+                    spikes: BoundedVec::default(),
                     deleted: false,
                 },
             )?;
@@ -234,10 +306,11 @@ mod emf_contract {
         }
 
         #[ink(message)]
-        pub fn store_measurement(&mut self, value: u128) -> Result<(), EmfError> {
+        pub fn store_measurement(&mut self, value: MeasurementType) -> Result<(), EmfError> {
             let sub_entity_record = self.load_sub_entity(self.env().caller())?;
             let mut measurements = sub_entity_record.measurements;
-            measurements.add(value, self.env().block_timestamp(), SECS_IN_23H)?;
+            let cap_reached = measurements
+                .add(Measurement::new(value, self.env().block_timestamp()), SECS_IN_23H)?;
             self.sub_entities.try_insert(
                 self.env().caller(),
                 &SubEntity {
@@ -248,11 +321,17 @@ mod emf_contract {
                     deleted: sub_entity_record.deleted,
                 },
             )?;
+            if cap_reached {
+                self.env().emit_event(CertificateReady {
+                    entity: sub_entity_record.entity,
+                    sub_entity: self.env().caller(),
+                });
+            }
             Ok(())
         }
 
         #[ink(message)]
-        pub fn store_measurement_spike(&mut self, value: u128) -> Result<(), EmfError> {
+        pub fn store_measurement_spike(&mut self, value: MeasurementType) -> Result<(), EmfError> {
             let sub_entity_record = self.load_sub_entity(self.env().caller())?;
             let mut spikes = sub_entity_record.spikes;
 
@@ -283,7 +362,8 @@ mod emf_contract {
                 false
             };
 
-            spikes.add(value, self.env().block_timestamp(), SECS_IN_ONE_MINUTE)?;
+            spikes
+                .add(Measurement::new(value, self.env().block_timestamp()), SECS_IN_ONE_MINUTE)?;
 
             self.sub_entities.try_insert(
                 self.env().caller(),
@@ -312,18 +392,90 @@ mod emf_contract {
         }
 
         #[ink(message)]
-        pub fn check_sub_entity(&mut self, sub_entity: AccountId) -> Result<bool, EmfError> {
+        pub fn check_sub_entity(&self, sub_entity: AccountId) -> Result<bool, EmfError> {
             let sub_entity_record = self.load_sub_entity(sub_entity)?;
             if sub_entity_record.measurements.0.len() != DAYS_IN_MONTH {
                 return Err(EmfError::NotEnoughRecords);
             }
-            for i in 0..DAYS_IN_MONTH {
-                let record = sub_entity_record.measurements.0.get(i).ok_or(EmfError::Unknown)?;
-                if record.value > self.threshold {
+            for measurement in sub_entity_record.measurements.0 {
+                if measurement.value > self.threshold {
                     return Ok(false);
                 }
             }
             Ok(true)
+        }
+
+        #[ink(message)]
+        pub fn issue_certificate(
+            &mut self,
+            sub_entity: AccountId,
+        ) -> Result<CertificateIndexType, EmfError> {
+            let sub_entity_record = self.load_sub_entity(sub_entity)?;
+            if self.env().caller() != sub_entity_record.entity {
+                return Err(EmfError::SubEntityBelongingFailed);
+            }
+            if sub_entity_record.measurements.0.len() != DAYS_IN_MONTH {
+                return Err(EmfError::NotEnoughRecords);
+            }
+
+            self.current_certificate_index += 1;
+            let index = self.current_certificate_index;
+
+            let mut status = CertificateStatus::Ok;
+            let mut min_measurement: MeasurementType = MeasurementType::MAX;
+            let mut max_measurement: MeasurementType = MeasurementType::MIN;
+            let mut avg_measurement: MeasurementType = 0;
+            for measurement in &sub_entity_record.measurements.0 {
+                if measurement.value > self.threshold {
+                    status = CertificateStatus::Bad;
+                }
+                if measurement.value < min_measurement {
+                    min_measurement = measurement.value;
+                }
+                if measurement.value > max_measurement {
+                    max_measurement = measurement.value;
+                }
+                avg_measurement += measurement.value;
+            }
+            avg_measurement /= DAYS_IN_MONTH as u128;
+
+            let first_measurement_timestamp = sub_entity_record.measurements.0[0].timestamp;
+            let last_measurement_timestamp =
+                sub_entity_record.measurements.0[DAYS_IN_MONTH - 1].timestamp;
+
+            self.certificates.try_insert(
+                index,
+                &Certificate {
+                    index,
+                    entity: self.env().caller(),
+                    sub_entity,
+                    status,
+                    min_measurement,
+                    max_measurement,
+                    avg_measurement,
+                    first_measurement_timestamp,
+                    last_measurement_timestamp,
+                },
+            )?;
+
+            self.sub_entities.try_insert(
+                sub_entity,
+                &SubEntity {
+                    entity: sub_entity_record.entity,
+                    location: sub_entity_record.location,
+                    measurements: BoundedVec::default(),
+                    spikes: BoundedVec::default(),
+                    deleted: sub_entity_record.deleted,
+                },
+            )?;
+
+            self.env().emit_event(CertificateIssued {
+                index,
+                entity: self.env().caller(),
+                sub_entity,
+            });
+
+            Ok(index)
         }
 
         fn load_sub_entity(&self, sub_entity: AccountId) -> Result<SubEntity, EmfError> {
@@ -596,9 +748,105 @@ mod emf_contract {
             assert!(!emf_contract.check_sub_entity(bob).unwrap());
         }
 
+        /// We test successful certification issue with ok status.
+        #[ink::test]
+        fn test_issue_certificate_ok() {
+            let mut emf_contract = EmfContract::default();
+
+            let alice = default_accounts().alice;
+            let bob = default_accounts().bob;
+
+            set_sender(alice);
+            emf_contract.create_entity().unwrap();
+            emf_contract.create_sub_entity(bob, LOCATION.into()).unwrap();
+
+            set_sender(default_accounts().charlie);
+            let err = emf_contract.issue_certificate(bob).unwrap_err();
+            assert_eq!(EmfError::SubEntityBelongingFailed, err);
+
+            set_sender(alice);
+
+            let err = emf_contract.issue_certificate(bob).unwrap_err();
+            assert_eq!(EmfError::NotEnoughRecords, err);
+
+            set_sender(bob);
+            let mut timestamp = 0;
+            for i in 0..30 {
+                let measurement: MeasurementType = if i < 10 {
+                    4
+                } else if (10..20).contains(&i) {
+                    5
+                } else {
+                    6
+                };
+                timestamp += SECS_IN_23H;
+                set_timestamp(timestamp);
+                emf_contract.store_measurement(measurement).unwrap();
+            }
+            emf_contract.store_measurement_spike(111).unwrap();
+
+            set_sender(alice);
+            assert_eq!(0, emf_contract.current_certificate_index);
+            let index = emf_contract.issue_certificate(bob).unwrap();
+            assert_eq!(1, emf_contract.current_certificate_index);
+
+            let certificate = emf_contract.certificates.get(index).unwrap();
+            assert_eq!(certificate.index, 1);
+            assert_eq!(certificate.entity, alice);
+            assert_eq!(certificate.sub_entity, bob);
+            assert_eq!(certificate.status, CertificateStatus::Ok);
+            assert_eq!(certificate.min_measurement, 4);
+            assert_eq!(certificate.max_measurement, 6);
+            assert_eq!(certificate.avg_measurement, 5);
+            assert_eq!(certificate.first_measurement_timestamp, timestamp - SECS_IN_23H * 29);
+            assert_eq!(certificate.last_measurement_timestamp, timestamp);
+
+            assert!(emf_contract.sub_entities.get(bob).unwrap().measurements.0.is_empty());
+            assert!(emf_contract.sub_entities.get(bob).unwrap().spikes.0.is_empty());
+
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            assert_eq!(5, emitted_events.len());
+            let certificated_issued: CertificateIssued = decode_event(&emitted_events[4]);
+            assert_eq!(certificated_issued.index, 1);
+            assert_eq!(certificated_issued.entity, alice);
+            assert_eq!(certificated_issued.sub_entity, bob);
+        }
+
+        /// We test successful certification issue with bad status.
+        #[ink::test]
+        fn test_issue_certificate_bad() {
+            let mut emf_contract = EmfContract::default();
+
+            let alice = default_accounts().alice;
+            let bob = default_accounts().bob;
+
+            set_sender(alice);
+            emf_contract.create_entity().unwrap();
+            emf_contract.create_sub_entity(bob, LOCATION.into()).unwrap();
+
+            set_sender(bob);
+            let mut timestamp = 0;
+            for _ in 0..30 {
+                timestamp += SECS_IN_23H;
+                set_timestamp(timestamp);
+                emf_contract.store_measurement(55).unwrap();
+            }
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            assert_eq!(3, emitted_events.len());
+            let certificated_ready: CertificateReady = decode_event(&emitted_events[2]);
+            assert_eq!(certificated_ready.entity, alice);
+            assert_eq!(certificated_ready.sub_entity, bob);
+
+            set_sender(alice);
+            emf_contract.issue_certificate(bob).unwrap();
+
+            let certificate = emf_contract.certificates.get(1).unwrap();
+            assert_eq!(certificate.status, CertificateStatus::Bad);
+        }
+
         fn generic_measurements_test<WriteFn, ReadFn>(write_fn: WriteFn, read_fn: ReadFn)
         where
-            WriteFn: Fn(&mut EmfContract, u128) -> Result<(), EmfError>,
+            WriteFn: Fn(&mut EmfContract, MeasurementType) -> Result<(), EmfError>,
             ReadFn: Fn(&EmfContract, AccountId, usize) -> Measurement,
         {
             let mut emf_contract = EmfContract::default();
@@ -647,13 +895,16 @@ mod emf_contract {
             assert_eq!(EmfError::SubEntityAlreadyDeleted, err);
         }
 
-        fn store_measurement(emf_contract: &mut EmfContract, value: u128) -> Result<(), EmfError> {
+        fn store_measurement(
+            emf_contract: &mut EmfContract,
+            value: MeasurementType,
+        ) -> Result<(), EmfError> {
             emf_contract.store_measurement(value)
         }
 
         fn store_measurement_spike(
             emf_contract: &mut EmfContract,
-            value: u128,
+            value: MeasurementType,
         ) -> Result<(), EmfError> {
             emf_contract.store_measurement_spike(value)
         }
