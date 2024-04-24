@@ -1,0 +1,6 @@
+[workspace]
+members = ["emf_contract", "agent"]
+default-members = ["emf_contract", "agent"]
+resolver = "2"
+
+[workspace.dependencies]
