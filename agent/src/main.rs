@@ -4,7 +4,7 @@ use std::time::Duration;
 use log::{debug, error, info, LevelFilter};
 use tokio::{sync::watch, time::timeout};
 
-type EmfResult<T> = Result<T, Error>;
+type Res<T> = Result<T, Error>;
 
 struct Error(String);
 
@@ -21,7 +21,7 @@ impl<T: ToString> From<T> for Error {
 }
 
 #[tokio::main]
-async fn main() -> EmfResult<()> {
+async fn main() -> Res<()> {
     env_logger::builder()
         .filter(None, LevelFilter::Off)
         .filter_module("agent", LevelFilter::Trace)

@@ -3,3 +3,6 @@
 
 # Ignore backup files creates by cargo fmt.
 **/*.rs.bk
+
+# Substrate contracts node data.
+agent/data-substrate
