@@ -4,6 +4,8 @@ use std::time::Duration;
 use log::{debug, error, info, LevelFilter};
 use tokio::{sync::watch, time::timeout};
 
+mod emf_contract;
+
 type Res<T> = Result<T, Error>;
 
 struct Error(String);
