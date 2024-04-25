@@ -34,6 +34,7 @@ async fn main() -> Res<()> {
             error!("failed to received stop signal: {e}")
         }
     });
+    info!("agent started; waiting for termination signal");
     tokio::signal::ctrl_c().await?;
     debug!("received termination signal");
     stop_s.send(())?;

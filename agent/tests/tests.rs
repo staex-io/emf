@@ -75,7 +75,6 @@ async fn deploy_smart_contract() -> String {
         let line = from_utf8(line).unwrap();
         if line.contains("Contract ") {
             let split: Vec<&str> = line.split(' ').collect();
-            eprintln!("SPLIT: {:?}", split);
             if split.len() != 6 {
                 continue;
             }
@@ -83,6 +82,15 @@ async fn deploy_smart_contract() -> String {
         }
     }
     unreachable!()
+}
+
+fn start_agent() -> ChildProcess {
+    let child = tokio::process::Command::new("../target/debug/agent")
+        .env("RUST_LOG", "TRACE")
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    ChildProcess { child }
 }
 
 #[tokio::test]
@@ -106,6 +114,7 @@ async fn test_everything() {
     });
     timeout(Duration::from_secs(10), scn_r).await.unwrap().unwrap();
 
-    let smart_contract_address = deploy_smart_contract().await;
-    eprintln!("Smart contract address: {smart_contract_address}");
+    let _smart_contract_address = deploy_smart_contract().await;
+
+    let _agent_child = start_agent();
 }
