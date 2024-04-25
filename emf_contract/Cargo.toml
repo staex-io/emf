@@ -1,5 +1,6 @@
 [package]
 name = "emf_contract"
+authors = ["Staex"]
 version = "0.1.0"
 edition = "2021"
 

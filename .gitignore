@@ -6,3 +6,7 @@
 
 # Substrate contracts node data.
 agent/data-substrate
+emf_contract/data-substrate
+
+# Smart contract data.
+emf_contract/emf.metadata.scale

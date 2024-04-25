@@ -211,6 +211,7 @@ mod emf_contract {
                 self.0.pop_front();
             }
             let mut cap_reached = false;
+            #[allow(clippy::arithmetic_side_effects)]
             if self.0.len() == max_values - 1 {
                 cap_reached = true;
             }
@@ -375,6 +376,7 @@ mod emf_contract {
 
             let too_much_spikes = if spikes.0.len() >= self.min_spikes_count_to_spawn as usize {
                 // Unwrap is ok because new block timestamp cannot be less than in storage.
+                #[allow(clippy::arithmetic_side_effects)]
                 let time_diff = self
                     .env()
                     .block_timestamp()
@@ -384,6 +386,7 @@ mod emf_contract {
                 // nearest spikes which is more than TOO_MUCH_SPIKES_TIME_DIFF.
                 let mut interval_broken = false;
                 if time_diff <= self.max_time_between_spikes_to_spawn {
+                    #[allow(clippy::arithmetic_side_effects)]
                     for i in (spikes.0.len() - self.min_spikes_count_to_spawn as usize + 1
                         ..spikes.0.len())
                         .rev()
@@ -462,7 +465,8 @@ mod emf_contract {
                 return Err(EmfError::NotEnoughRecords);
             }
 
-            self.current_certificate_index += 1;
+            self.current_certificate_index =
+                self.current_certificate_index.checked_add(1).ok_or(EmfError::Unknown)?;
             let index = self.current_certificate_index;
 
             let mut status = CertificateStatus::Ok;
@@ -479,11 +483,15 @@ mod emf_contract {
                 if measurement.value > max_measurement {
                     max_measurement = measurement.value;
                 }
-                avg_measurement += measurement.value;
+                avg_measurement =
+                    avg_measurement.checked_add(measurement.value).ok_or(EmfError::Unknown)?;
             }
-            avg_measurement /= self.max_measurements_count as u128;
+            avg_measurement = avg_measurement
+                .checked_div(self.max_measurements_count as u128)
+                .ok_or(EmfError::Unknown)?;
 
             let first_measurement_timestamp = sub_entity_record.measurements.0[0].timestamp;
+            #[allow(clippy::arithmetic_side_effects)]
             let last_measurement_timestamp = sub_entity_record.measurements.0
                 [self.max_measurements_count as usize - 1]
                 .timestamp;
