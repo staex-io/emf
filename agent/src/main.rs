@@ -1,8 +1,10 @@
 use std::fmt::Debug;
 use std::time::Duration;
 
-use log::{debug, error, info, LevelFilter};
-use tokio::{sync::watch, time::timeout};
+use log::{debug, error, info, trace, LevelFilter};
+use tokio::net::unix::SocketAddr;
+use tokio::net::UnixStream;
+use tokio::{net::UnixListener, select, sync::watch, time::timeout};
 
 mod emf_contract;
 
@@ -28,12 +30,8 @@ async fn main() -> Res<()> {
         .filter(None, LevelFilter::Off)
         .filter_module("agent", LevelFilter::Trace)
         .init();
-    let (stop_s, mut stop_r) = watch::channel(());
-    tokio::spawn(async move {
-        if let Err(e) = stop_r.changed().await {
-            error!("failed to received stop signal: {e}")
-        }
-    });
+    let (stop_s, stop_r) = watch::channel(());
+    tokio::spawn(async move { start_unix_server(stop_r).await });
     info!("agent started; waiting for termination signal");
     tokio::signal::ctrl_c().await?;
     debug!("received termination signal");
@@ -44,5 +42,32 @@ async fn main() -> Res<()> {
             error!("failed to stop everything: {}", e)
         }
     }
+    Ok(())
+}
+
+async fn start_unix_server(mut stop_r: watch::Receiver<()>) {
+    let listener = UnixListener::bind("").unwrap();
+    loop {
+        select! {
+            _ = stop_r.changed() => {
+                trace!("received stop signal, exit unix server loop");
+                return;
+            }
+            connection = listener.accept() => {
+                if let Ok(connection) = connection {
+                    tokio::spawn(async move {
+                        if let Err(e) = process_connection(connection).await {
+                            error!("failed to process connection: {}", e.0)
+                        }
+                    });
+                }
+            }
+        }
+    }
+}
+
+async fn process_connection(connection: (UnixStream, SocketAddr)) -> Res<()> {
+    trace!("acquired new unix socket connection");
+    let (_stream, _) = connection;
     Ok(())
 }

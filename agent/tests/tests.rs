@@ -94,7 +94,7 @@ fn start_agent() -> ChildProcess {
 }
 
 #[tokio::test]
-async fn test_everything() {
+async fn test() {
     eprintln!(); // to start test logs from new line
 
     // Start substrate contracts node and wait.
