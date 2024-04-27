@@ -10,3 +10,6 @@ emf_contract/data-substrate
 
 # Smart contract data.
 emf_contract/emf.metadata.scale
+
+# Measurement module data.
+agent/measurements.txt

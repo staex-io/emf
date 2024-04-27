@@ -6,11 +6,17 @@ use std::time::Duration;
 
 use log::{debug, error, info, trace, LevelFilter};
 use serde::{Deserialize, Serialize};
+use storage::Storage;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::{select, sync::watch, time::timeout};
 
 mod emf_contract;
+mod storage;
+
+const MAX_MEASUREMENT_VALUE: u128 = 10;
+
+const STORAGE_PATH: &str = "measurements.txt";
 
 type Res<T> = Result<T, Error>;
 
@@ -24,7 +30,7 @@ struct RpcResponse {
     value: u128,
 }
 
-struct Error(String);
+pub(crate) struct Error(String);
 
 impl Debug for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -110,6 +116,7 @@ async fn process_connection(connection: (TcpStream, SocketAddr)) -> Res<()> {
 
     trace!("received new data from {} client: {}", addr, from_utf8(&buf)?);
     let req: RpcRequest = serde_json::from_slice(&buf)?;
+    handle_rpc_request(&req).await?;
     let mut buf: Vec<u8> = serde_json::to_vec(&RpcResponse { value: req.value })?;
     write(&mut stream, &mut buf).await
 }
@@ -120,4 +127,21 @@ async fn write(stream: &mut TcpStream, buf: &mut Vec<u8>) -> Res<()> {
         buf.push(10);
     }
     Ok(stream.write_all(buf).await?)
+}
+
+async fn handle_rpc_request(req: &RpcRequest) -> Res<()> {
+    let mut storage = Storage::new(STORAGE_PATH)?;
+    let last_iteration = storage.write(req.value)?;
+    if !last_iteration.is_empty() {
+        let mut _avg_value = 0;
+        for value in &last_iteration {
+            _avg_value += value;
+        }
+        _avg_value /= last_iteration.len() as u128;
+        // todo: store average value in smart contract
+    }
+    if req.value > MAX_MEASUREMENT_VALUE {
+        // todo: store spike in smart contract
+    }
+    Ok(())
 }
