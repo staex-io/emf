@@ -1,0 +1,15 @@
+# Ignore build artifacts from the local tests sub-crate.
+/target/
+
+# Ignore backup files creates by cargo fmt.
+**/*.rs.bk
+
+# Substrate contracts node data.
+agent/data-substrate
+emf_contract/data-substrate
+
+# Smart contract data.
+emf_contract/emf.metadata.scale
+
+# Measurement module data.
+agent/measurements.txt

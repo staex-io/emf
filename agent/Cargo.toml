@@ -1,0 +1,16 @@
+[package]
+name = "agent"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = { version = "0.4.21", features = [], default-features = false }
+env_logger = { version = "0.11.3", features = ["auto-color", "humantime"], default-features = false }
+tokio = { version = "1.37.0", features = ["macros", "io-util", "rt-multi-thread", "sync", "signal", "time", "net"], default-features = false }
+serde = { version = "1.0.198", features = [], default-features = false }
+serde_json = { version = "1.0.116", features = [], default-features = false }
+subxt = { version = "0.35.3", features = ["native"], default-features = false }
+
+[dev-dependencies]
+tokio = { version = "1.37.0", features = ["process"], default-features = false }
+rand = { version = "0.8.5", features = [], default-features = true }

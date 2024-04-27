@@ -6,8 +6,10 @@ mod emf_contract {
     use ink::storage::{traits::StorageLayout, Mapping};
 
     // Average days in month.
-    const DAYS_IN_MONTH: usize = 30;
+    const DAYS_IN_MONTH: u8 = 30;
+    // Seconds in 23 hours.
     const SECS_IN_23H: u64 = 82_800;
+    // Seconds in one minute.
     const SECS_IN_ONE_MINUTE: u64 = 60;
 
     // If time between spikes are more than this diff
@@ -18,27 +20,10 @@ mod emf_contract {
     // Actually it means we need 10 spikes to spawn too much spikes event.
     // Because we need to have 9 spikes in the storage and 1 newly received spike
     // by smart contract method execution call.
-    const TOO_MUCH_SPIKES_COUNT: usize = 9;
+    const TOO_MUCH_SPIKES_COUNT: u8 = 9;
 
     type MeasurementType = u128;
     type CertificateIndexType = u128;
-
-    #[ink(storage)]
-    pub struct EmfContract {
-        pub threshold: MeasurementType,
-
-        pub entities: Mapping<AccountId, Entity>,
-        pub sub_entities: Mapping<AccountId, SubEntity>,
-
-        current_certificate_index: CertificateIndexType,
-        pub certificates: Mapping<CertificateIndexType, Certificate>,
-    }
-
-    impl Default for EmfContract {
-        fn default() -> Self {
-            EmfContract::new(10)
-        }
-    }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(StorageLayout))]
@@ -194,7 +179,7 @@ mod emf_contract {
         T: TimeConscious,
     {
         fn default() -> Self {
-            Self(VecDeque::with_capacity(DAYS_IN_MONTH))
+            Self(VecDeque::with_capacity(DAYS_IN_MONTH as usize))
         }
     }
 
@@ -202,7 +187,12 @@ mod emf_contract {
     where
         T: TimeConscious,
     {
-        pub fn add(&mut self, data: T, min_time_diff: u64) -> Result<bool, EmfError> {
+        pub fn add(
+            &mut self,
+            data: T,
+            max_values: usize,
+            min_time_diff: u64,
+        ) -> Result<bool, EmfError> {
             // If there are values in vector.
             // We need to check that previous value was not wrote
             // in less than 23h.
@@ -217,11 +207,12 @@ mod emf_contract {
                     return Err(EmfError::MeasurementTooFast);
                 }
             }
-            if self.0.len() == DAYS_IN_MONTH {
+            if self.0.len() == max_values {
                 self.0.pop_front();
             }
             let mut cap_reached = false;
-            if self.0.len() == DAYS_IN_MONTH - 1 {
+            #[allow(clippy::arithmetic_side_effects)]
+            if self.0.len() == max_values - 1 {
                 cap_reached = true;
             }
             self.0.push_back(data);
@@ -229,13 +220,58 @@ mod emf_contract {
         }
     }
 
+    #[ink(storage)]
+    pub struct EmfContract {
+        max_measurement_value: MeasurementType,
+        max_measurements_count: u8,
+        min_time_between_measurements_to_save: u64,
+        min_time_between_spikes_to_save: u64,
+        // If nearest spikes time difference more that such time
+        // we don't need to spawn too much spikes event.
+        max_time_between_spikes_to_spawn: u64,
+        min_spikes_count_to_spawn: u8,
+
+        entities: Mapping<AccountId, Entity>,
+        sub_entities: Mapping<AccountId, SubEntity>,
+
+        current_certificate_index: CertificateIndexType,
+        certificates: Mapping<CertificateIndexType, Certificate>,
+    }
+
+    impl Default for EmfContract {
+        fn default() -> Self {
+            EmfContract::new(
+                10,
+                DAYS_IN_MONTH,
+                SECS_IN_23H,
+                SECS_IN_ONE_MINUTE,
+                TOO_MUCH_SPIKES_TIME_DIFF,
+                TOO_MUCH_SPIKES_COUNT,
+            )
+        }
+    }
+
     impl EmfContract {
         #[ink(constructor)]
-        pub fn new(threshold: MeasurementType) -> Self {
+        pub fn new(
+            max_measurement_value: MeasurementType,
+            max_measurements_count: u8,
+            min_time_between_measurements_to_save: u64,
+            min_time_between_spikes_to_save: u64,
+            max_time_between_spikes_to_spawn: u64,
+            min_spikes_count_to_spawn: u8,
+        ) -> Self {
             Self {
-                threshold,
+                max_measurement_value,
+                max_measurements_count,
+                min_time_between_measurements_to_save,
+                min_time_between_spikes_to_save,
+                max_time_between_spikes_to_spawn,
+                min_spikes_count_to_spawn,
+
                 entities: Mapping::new(),
                 sub_entities: Mapping::new(),
+
                 current_certificate_index: 0,
                 certificates: Mapping::new(),
             }
@@ -309,8 +345,11 @@ mod emf_contract {
         pub fn store_measurement(&mut self, value: MeasurementType) -> Result<(), EmfError> {
             let sub_entity_record = self.load_sub_entity(self.env().caller())?;
             let mut measurements = sub_entity_record.measurements;
-            let cap_reached = measurements
-                .add(Measurement::new(value, self.env().block_timestamp()), SECS_IN_23H)?;
+            let cap_reached = measurements.add(
+                Measurement::new(value, self.env().block_timestamp()),
+                self.max_measurements_count as usize,
+                self.min_time_between_measurements_to_save,
+            )?;
             self.sub_entities.try_insert(
                 self.env().caller(),
                 &SubEntity {
@@ -335,8 +374,9 @@ mod emf_contract {
             let sub_entity_record = self.load_sub_entity(self.env().caller())?;
             let mut spikes = sub_entity_record.spikes;
 
-            let too_much_spikes = if spikes.0.len() >= TOO_MUCH_SPIKES_COUNT {
+            let too_much_spikes = if spikes.0.len() >= self.min_spikes_count_to_spawn as usize {
                 // Unwrap is ok because new block timestamp cannot be less than in storage.
+                #[allow(clippy::arithmetic_side_effects)]
                 let time_diff = self
                     .env()
                     .block_timestamp()
@@ -345,11 +385,15 @@ mod emf_contract {
                 // It means in last 10 spikes we have at least one diff between two
                 // nearest spikes which is more than TOO_MUCH_SPIKES_TIME_DIFF.
                 let mut interval_broken = false;
-                if time_diff <= TOO_MUCH_SPIKES_TIME_DIFF {
-                    for i in (spikes.0.len() - TOO_MUCH_SPIKES_COUNT + 1..spikes.0.len()).rev() {
+                if time_diff <= self.max_time_between_spikes_to_spawn {
+                    #[allow(clippy::arithmetic_side_effects)]
+                    for i in (spikes.0.len() - self.min_spikes_count_to_spawn as usize + 1
+                        ..spikes.0.len())
+                        .rev()
+                    {
                         let spike_lt = &spikes.0[i - 1].timestamp;
                         let spike_rt = &spikes.0[i].timestamp;
-                        if spike_rt - spike_lt > TOO_MUCH_SPIKES_TIME_DIFF {
+                        if spike_rt - spike_lt > self.max_time_between_spikes_to_spawn {
                             interval_broken = true;
                             break;
                         }
@@ -362,8 +406,11 @@ mod emf_contract {
                 false
             };
 
-            spikes
-                .add(Measurement::new(value, self.env().block_timestamp()), SECS_IN_ONE_MINUTE)?;
+            spikes.add(
+                Measurement::new(value, self.env().block_timestamp()),
+                self.max_measurements_count as usize,
+                self.min_time_between_spikes_to_save,
+            )?;
 
             self.sub_entities.try_insert(
                 self.env().caller(),
@@ -394,11 +441,11 @@ mod emf_contract {
         #[ink(message)]
         pub fn check_sub_entity(&self, sub_entity: AccountId) -> Result<bool, EmfError> {
             let sub_entity_record = self.load_sub_entity(sub_entity)?;
-            if sub_entity_record.measurements.0.len() != DAYS_IN_MONTH {
+            if sub_entity_record.measurements.0.len() != self.max_measurements_count as usize {
                 return Err(EmfError::NotEnoughRecords);
             }
             for measurement in sub_entity_record.measurements.0 {
-                if measurement.value > self.threshold {
+                if measurement.value > self.max_measurement_value {
                     return Ok(false);
                 }
             }
@@ -414,11 +461,12 @@ mod emf_contract {
             if self.env().caller() != sub_entity_record.entity {
                 return Err(EmfError::SubEntityBelongingFailed);
             }
-            if sub_entity_record.measurements.0.len() != DAYS_IN_MONTH {
+            if sub_entity_record.measurements.0.len() != self.max_measurements_count as usize {
                 return Err(EmfError::NotEnoughRecords);
             }
 
-            self.current_certificate_index += 1;
+            self.current_certificate_index =
+                self.current_certificate_index.checked_add(1).ok_or(EmfError::Unknown)?;
             let index = self.current_certificate_index;
 
             let mut status = CertificateStatus::Ok;
@@ -426,7 +474,7 @@ mod emf_contract {
             let mut max_measurement: MeasurementType = MeasurementType::MIN;
             let mut avg_measurement: MeasurementType = 0;
             for measurement in &sub_entity_record.measurements.0 {
-                if measurement.value > self.threshold {
+                if measurement.value > self.max_measurement_value {
                     status = CertificateStatus::Bad;
                 }
                 if measurement.value < min_measurement {
@@ -435,13 +483,18 @@ mod emf_contract {
                 if measurement.value > max_measurement {
                     max_measurement = measurement.value;
                 }
-                avg_measurement += measurement.value;
+                avg_measurement =
+                    avg_measurement.checked_add(measurement.value).ok_or(EmfError::Unknown)?;
             }
-            avg_measurement /= DAYS_IN_MONTH as u128;
+            avg_measurement = avg_measurement
+                .checked_div(self.max_measurements_count as u128)
+                .ok_or(EmfError::Unknown)?;
 
             let first_measurement_timestamp = sub_entity_record.measurements.0[0].timestamp;
-            let last_measurement_timestamp =
-                sub_entity_record.measurements.0[DAYS_IN_MONTH - 1].timestamp;
+            #[allow(clippy::arithmetic_side_effects)]
+            let last_measurement_timestamp = sub_entity_record.measurements.0
+                [self.max_measurements_count as usize - 1]
+                .timestamp;
 
             self.certificates.try_insert(
                 index,
