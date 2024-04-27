@@ -1,6 +1,11 @@
 use std::{process::Stdio, str::from_utf8, time::Duration};
 
-use tokio::{io::AsyncBufReadExt, sync::oneshot, time::timeout};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+    sync::oneshot,
+    time::timeout,
+};
 
 struct ChildProcess {
     child: tokio::process::Child,
@@ -88,6 +93,9 @@ fn start_agent() -> ChildProcess {
     let child = tokio::process::Command::new("../target/debug/agent")
         .env("RUST_LOG", "TRACE")
         .kill_on_drop(true)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()
         .unwrap();
     ChildProcess { child }
@@ -116,5 +124,30 @@ async fn test() {
 
     let _smart_contract_address = deploy_smart_contract().await;
 
-    let _agent_child = start_agent();
+    let mut agent_child = start_agent();
+    let agent_stderr = agent_child.child.stderr.take().unwrap();
+    let mut agent_reader = tokio::io::BufReader::new(agent_stderr);
+    let (agent_s, agent_r) = oneshot::channel::<String>();
+    tokio::spawn(async move {
+        loop {
+            let mut buf = String::new();
+            agent_reader.read_line(&mut buf).await.unwrap();
+            if buf.contains("starting tcp server on") {
+                let parts: Vec<&str> = buf.split(" on ").collect();
+                if parts.len() != 2 {
+                    continue;
+                }
+                // Remove \n at the end.
+                let agent_unix_socket = parts[1][..parts[1].len() - 1].to_string();
+                agent_s.send(agent_unix_socket).unwrap();
+                return;
+            }
+        }
+    });
+    let tcp_server_address = timeout(Duration::from_secs(10), agent_r).await.unwrap().unwrap();
+
+    let mut stream = TcpStream::connect(tcp_server_address).await.unwrap();
+    timeout(Duration::from_secs(3), stream.write_all(b"123\n")).await.unwrap().unwrap();
+    let mut buf: Vec<u8> = Vec::new();
+    timeout(Duration::from_secs(3), stream.read_to_end(&mut buf)).await.unwrap().unwrap();
 }
