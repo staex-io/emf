@@ -20,16 +20,6 @@ const STORAGE_PATH: &str = "measurements.txt";
 
 type Res<T> = Result<T, Error>;
 
-#[derive(Serialize, Deserialize)]
-struct RpcRequest {
-    value: u128,
-}
-
-#[derive(Serialize, Deserialize)]
-struct RpcResponse {
-    value: u128,
-}
-
 pub(crate) struct Error(String);
 
 impl Debug for Error {
@@ -42,6 +32,16 @@ impl<T: ToString> From<T> for Error {
     fn from(value: T) -> Self {
         Self(value.to_string())
     }
+}
+
+#[derive(Serialize, Deserialize)]
+struct RpcRequest {
+    value: u128,
+}
+
+#[derive(Serialize, Deserialize)]
+struct RpcResponse {
+    value: u128,
 }
 
 #[tokio::main]
