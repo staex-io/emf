@@ -5,6 +5,7 @@ use std::str::from_utf8;
 use std::time::Duration;
 
 use log::{debug, error, info, trace, LevelFilter};
+use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::{select, sync::watch, time::timeout};
@@ -12,6 +13,16 @@ use tokio::{select, sync::watch, time::timeout};
 mod emf_contract;
 
 type Res<T> = Result<T, Error>;
+
+#[derive(Serialize, Deserialize)]
+struct RpcRequest {
+    value: u128,
+}
+
+#[derive(Serialize, Deserialize)]
+struct RpcResponse {
+    value: u128,
+}
 
 struct Error(String);
 
@@ -77,7 +88,7 @@ async fn process_connection(connection: (TcpStream, SocketAddr)) -> Res<()> {
 
     let mut buf: Vec<u8> = vec![0; 1024];
     let n = stream.read(&mut buf).await;
-    let mut buf = match n {
+    let buf = match n {
         Ok(0) => {
             trace!("rpc client disconnected: {}", addr);
             return Ok(());
@@ -98,6 +109,8 @@ async fn process_connection(connection: (TcpStream, SocketAddr)) -> Res<()> {
     };
 
     trace!("received new data from {} client: {}", addr, from_utf8(&buf)?);
+    let req: RpcRequest = serde_json::from_slice(&buf)?;
+    let mut buf: Vec<u8> = serde_json::to_vec(&RpcResponse { value: req.value })?;
     write(&mut stream, &mut buf).await
 }
 

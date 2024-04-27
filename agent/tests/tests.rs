@@ -1,11 +1,22 @@
 use std::{process::Stdio, str::from_utf8, time::Duration};
 
+use serde::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
     sync::oneshot,
     time::timeout,
 };
+
+#[derive(Serialize, Deserialize)]
+struct RpcRequest {
+    value: u128,
+}
+
+#[derive(Serialize, Deserialize)]
+struct RpcResponse {
+    value: u128,
+}
 
 struct ChildProcess {
     child: tokio::process::Child,
@@ -147,7 +158,12 @@ async fn test() {
     let tcp_server_address = timeout(Duration::from_secs(10), agent_r).await.unwrap().unwrap();
 
     let mut stream = TcpStream::connect(tcp_server_address).await.unwrap();
-    timeout(Duration::from_secs(3), stream.write_all(b"123\n")).await.unwrap().unwrap();
+    const VALUE: u128 = 111;
+    let mut buf = serde_json::to_vec(&RpcRequest { value: VALUE }).unwrap();
+    buf.push(b'\n');
+    timeout(Duration::from_secs(3), stream.write_all(&buf)).await.unwrap().unwrap();
     let mut buf: Vec<u8> = Vec::new();
     timeout(Duration::from_secs(3), stream.read_to_end(&mut buf)).await.unwrap().unwrap();
+    let res: RpcResponse = serde_json::from_slice(&buf).unwrap();
+    assert_eq!(VALUE, res.value);
 }
