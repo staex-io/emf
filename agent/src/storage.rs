@@ -1,99 +1,122 @@
 use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use serde::{Deserialize, Serialize};
 
 use crate::Res;
 
-const DELIMITER: char = '-';
+const H24: Duration = Duration::from_secs(60 * 60 * 24);
 
 pub(crate) struct Storage {
     file: File,
-    current_size: usize,
-    iteration_size: usize,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Data {
+    first_measurement: SystemTime,
+    last_measurement: SystemTime,
+    measurements: Vec<u128>,
 }
 
 impl Storage {
     pub(crate) fn new(file_path: &str) -> Res<Self> {
-        let file = OpenOptions::new().create(true).read(true).append(true).open(file_path)?;
-        let current_size = Self::count_current_size(&file)?;
-        Ok(Self {
-            file,
-            current_size,
-            iteration_size: 30,
-        })
+        let file = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .truncate(false)
+            .open(file_path)?;
+        Ok(Self { file })
     }
 
     pub(crate) fn write(&mut self, value: u128) -> Res<Vec<u128>> {
-        writeln!(self.file, "{}", value)?;
-        self.current_size += 1;
-        self.file.sync_all()?;
+        let mut buf = Vec::new();
+        self.file.read_to_end(&mut buf)?;
 
-        if self.current_size % self.iteration_size == 0 {
-            let last_iteration = self.read_last_iteration()?;
-            writeln!(self.file, "{}", DELIMITER)?;
-            self.file.sync_all()?;
-            return Ok(last_iteration);
+        if buf.is_empty() {
+            let data = Data {
+                first_measurement: SystemTime::now(),
+                last_measurement: SystemTime::now(),
+                measurements: vec![value],
+            };
+
+            let buf = serde_json::to_vec(&data)?;
+            self.file.seek(SeekFrom::Start(0))?;
+            self.file.write_all(&buf)?;
+            self.file.flush()?;
+            self.file.set_len(buf.len() as u64)?;
+
+            return Ok(vec![]);
         }
+
+        let mut data: Data = serde_json::from_slice(&buf)?;
+        if data.first_measurement.eq(&UNIX_EPOCH) {
+            data.first_measurement = SystemTime::now();
+        }
+        data.last_measurement = SystemTime::now();
+        data.measurements.push(value);
+        if data.last_measurement.duration_since(data.first_measurement)? >= H24 {
+            data.first_measurement = UNIX_EPOCH;
+            data.last_measurement = UNIX_EPOCH;
+            data.measurements = vec![];
+
+            let buf = serde_json::to_vec(&data)?;
+            self.file.seek(SeekFrom::Start(0))?;
+            self.file.write_all(&buf)?;
+            self.file.flush()?;
+            self.file.set_len(buf.len() as u64)?;
+
+            return Ok(data.measurements);
+        }
+
+        let buf = serde_json::to_vec(&data)?;
+        self.file.seek(SeekFrom::Start(0))?;
+        self.file.write_all(&buf)?;
+        self.file.flush()?;
+        self.file.set_len(buf.len() as u64)?;
 
         Ok(vec![])
-    }
-
-    fn read_last_iteration(&mut self) -> Res<Vec<u128>> {
-        let mut pos = self.file.metadata()?.len();
-        let mut reader = BufReader::new(self.file.try_clone()?);
-        let mut values = Vec::new();
-
-        while pos > 0 && values.len() < self.iteration_size {
-            reader.seek(SeekFrom::Start(pos))?;
-            let mut byte = [0; 1];
-            if reader.read(&mut byte)? == 0 || byte[0] == b'\n' {
-                let mut line = String::new();
-                reader.read_line(&mut line)?;
-                if line.trim().is_empty() || line.contains(DELIMITER) {
-                    pos = pos.saturating_sub(1);
-                    continue;
-                }
-                if let Ok(number) = line.trim().parse::<u128>() {
-                    values.push(number);
-                }
-            } else {
-                pos = pos.saturating_sub(1);
-            }
-        }
-        Ok(values)
-    }
-
-    fn count_current_size(file: &File) -> Res<usize> {
-        let reader = BufReader::new(file);
-        Ok(reader
-            .lines()
-            .filter(|line| {
-                if let Ok(line) = line.as_ref() {
-                    if let Some(char) = line.chars().last() {
-                        return char != DELIMITER;
-                    }
-                }
-                false
-            })
-            .count())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::env::temp_dir;
+    use std::{
+        env::temp_dir,
+        io::{Read, Write},
+        time::SystemTime,
+    };
+
+    use crate::storage::{Data, H24};
 
     use super::Storage;
 
     #[test]
     fn test() {
         let path = format!("{}{}", temp_dir().to_string_lossy(), rand::random::<u128>());
+        eprintln!("\nTemporary storage file path: {path}");
         let mut storage = Storage::new(&path).unwrap();
+
         for _ in 0..89 {
-            storage.write(rand::random()).unwrap();
+            let res = storage.write(rand::random()).unwrap();
+            assert!(res.is_empty());
         }
-        let res = storage.write(rand::random()).unwrap();
-        assert_eq!(30, res.len());
-        let res = storage.write(rand::random()).unwrap();
-        assert!(res.is_empty());
+
+        // drop(storage);
+
+        let mut buf = Vec::new();
+        storage.file.read_to_end(&mut buf).unwrap();
+        let mut data: Data = serde_json::from_slice(&buf).unwrap();
+        data.last_measurement = SystemTime::now() + H24;
+        let buf = serde_json::to_vec(&data).unwrap();
+        storage.file.write_all(&buf).unwrap();
+        storage.file.flush().unwrap();
+
+        let random_number = rand::random();
+        let res = storage.write(random_number).unwrap();
+        assert!(!res.is_empty());
+        assert_eq!(90, res.len());
+        assert_eq!(random_number, *res.last().unwrap());
     }
 }
