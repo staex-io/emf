@@ -1,4 +1,9 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    fs::File,
+    io::{Read, Seek, SeekFrom, Write},
+    os::unix::fs::MetadataExt,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -14,15 +19,17 @@ struct Data {
 }
 
 pub(crate) fn save(filepath: &str, value: u128) -> Res<Vec<u128>> {
-    // Create file if not exists.
-    std::fs::OpenOptions::new()
+    let mut file = std::fs::OpenOptions::new()
         .create(true)
         .read(true)
         .write(true)
         .truncate(false)
         .open(filepath)?;
-    // And read it.
-    let buf = std::fs::read(filepath)?;
+    let file_size = file.metadata()?.size() as usize;
+
+    let mut buf: Vec<u8> = vec![0; file_size];
+    let n = file.read(&mut buf)?;
+    buf.truncate(n);
 
     if buf.is_empty() {
         let data = Data {
@@ -31,7 +38,7 @@ pub(crate) fn save(filepath: &str, value: u128) -> Res<Vec<u128>> {
             measurements: vec![value],
         };
 
-        write_to_file(filepath, data)?;
+        write_to_file(file, data)?;
 
         return Ok(vec![]);
     }
@@ -48,20 +55,24 @@ pub(crate) fn save(filepath: &str, value: u128) -> Res<Vec<u128>> {
         data.first_measurement = UNIX_EPOCH;
         data.last_measurement = UNIX_EPOCH;
         data.measurements = vec![];
-        write_to_file(filepath, data)?;
+        write_to_file(file, data)?;
 
         return Ok(saved_measurements);
     }
 
     data.last_measurement = SystemTime::now();
-    write_to_file(filepath, data)?;
+    write_to_file(file, data)?;
 
     Ok(vec![])
 }
 
-fn write_to_file(filepath: &str, data: Data) -> Res<()> {
+fn write_to_file(mut file: File, data: Data) -> Res<()> {
     let buf = serde_json::to_vec(&data)?;
-    Ok(std::fs::write(filepath, buf)?)
+    file.seek(SeekFrom::Start(0))?;
+    file.write_all(&buf)?;
+    file.set_len(buf.len() as u64)?;
+    file.flush()?;
+    Ok(())
 }
 
 #[cfg(test)]
