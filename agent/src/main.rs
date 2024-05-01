@@ -6,7 +6,6 @@ use std::time::Duration;
 
 use log::{debug, error, info, trace, LevelFilter};
 use serde::{Deserialize, Serialize};
-use storage::Storage;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::{select, sync::watch, time::timeout};
@@ -16,7 +15,7 @@ mod storage;
 
 const MAX_MEASUREMENT_VALUE: u128 = 10;
 
-const STORAGE_PATH: &str = "measurements.txt";
+const STORAGE_FILEPATH: &str = "measurements.json";
 
 type Res<T> = Result<T, Error>;
 
@@ -130,8 +129,7 @@ async fn write(stream: &mut TcpStream, buf: &mut Vec<u8>) -> Res<()> {
 }
 
 async fn handle_rpc_request(req: &RpcRequest) -> Res<()> {
-    let mut storage = Storage::new(STORAGE_PATH)?;
-    let last_iteration = storage.write(req.value)?;
+    let last_iteration = storage::save(STORAGE_FILEPATH, req.value)?;
     if !last_iteration.is_empty() {
         let mut _avg_value = 0;
         for value in &last_iteration {

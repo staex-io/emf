@@ -12,4 +12,4 @@ emf_contract/data-substrate
 emf_contract/emf.metadata.scale
 
 # Measurement module data.
-agent/measurements.txt
+agent/measurements.json
