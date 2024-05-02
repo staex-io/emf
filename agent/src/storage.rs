@@ -82,7 +82,7 @@ mod tests {
     use crate::storage;
 
     #[test]
-    fn test() {
+    fn test_storage() {
         let filepath = format!("{}{}", temp_dir().to_string_lossy(), rand::random::<u128>());
         eprintln!("\nTemporary storage file path: {filepath}");
 

@@ -18,9 +18,7 @@ mod emf_contract {
     // 6m in seconds.
     const TOO_MUCH_SPIKES_TIME_DIFF: u64 = 360;
     // Actually it means we need 10 spikes to spawn too much spikes event.
-    // Because we need to have 9 spikes in the storage and 1 newly received spike
-    // by smart contract method execution call.
-    const TOO_MUCH_SPIKES_COUNT: u8 = 9;
+    const TOO_MUCH_SPIKES_COUNT: u8 = 10;
 
     type MeasurementType = u128;
     type CertificateIndexType = u128;
@@ -374,13 +372,22 @@ mod emf_contract {
             let sub_entity_record = self.load_sub_entity(self.env().caller())?;
             let mut spikes = sub_entity_record.spikes;
 
+            spikes.add(
+                Measurement::new(value, self.env().block_timestamp()),
+                self.max_measurements_count as usize,
+                self.min_time_between_spikes_to_save,
+            )?;
+
             let too_much_spikes = if spikes.0.len() >= self.min_spikes_count_to_spawn as usize {
                 // Unwrap is ok because new block timestamp cannot be less than in storage.
                 #[allow(clippy::arithmetic_side_effects)]
                 let time_diff = self
                     .env()
                     .block_timestamp()
-                    .checked_sub(spikes.0[spikes.0.len() - 1].timestamp)
+                    // We sub here -2 because we need to get spike
+                    // which was saved before current spike
+                    // which we saved in this contract call and its last right now.
+                    .checked_sub(spikes.0[spikes.0.len() - 2].timestamp)
                     .unwrap();
                 // It means in last 10 spikes we have at least one diff between two
                 // nearest spikes which is more than TOO_MUCH_SPIKES_TIME_DIFF.
@@ -405,12 +412,6 @@ mod emf_contract {
             } else {
                 false
             };
-
-            spikes.add(
-                Measurement::new(value, self.env().block_timestamp()),
-                self.max_measurements_count as usize,
-                self.min_time_between_spikes_to_save,
-            )?;
 
             self.sub_entities.try_insert(
                 self.env().caller(),
@@ -738,6 +739,43 @@ mod emf_contract {
             assert_eq!(EmfError::MeasurementTooFast, err);
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
             assert_eq!(14, emitted_events.len());
+
+            // Clean spikes.
+            let old = emf_contract.sub_entities.get(bob).unwrap();
+            emf_contract.sub_entities.insert(
+                bob,
+                &SubEntity {
+                    entity: old.entity,
+                    location: old.location,
+                    measurements: old.measurements,
+                    spikes: BoundedVec::default(),
+                    deleted: old.deleted,
+                },
+            );
+
+            // Test that we can store up to 10 spikes but in the middle
+            // diff in time between some spikes are more than allowed.
+            for _ in 0..8 {
+                timestamp += TOO_MUCH_SPIKES_TIME_DIFF;
+                set_timestamp(timestamp);
+                emf_contract.store_measurement_spike(111).unwrap();
+            }
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            assert_eq!(14 + 8, emitted_events.len());
+
+            // Save spike with time than max allowed.
+            timestamp += TOO_MUCH_SPIKES_TIME_DIFF + 1;
+            set_timestamp(timestamp);
+            emf_contract.store_measurement_spike(111).unwrap();
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            assert_eq!(22 + 1, emitted_events.len());
+
+            timestamp += TOO_MUCH_SPIKES_TIME_DIFF;
+            set_timestamp(timestamp);
+            emf_contract.store_measurement_spike(111).unwrap();
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            // So we do not have too much spikes event.
+            assert_eq!(23 + 1, emitted_events.len());
         }
 
         /// We test check sub-entity smart contract method.

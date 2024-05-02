@@ -113,7 +113,7 @@ fn start_agent() -> ChildProcess {
 }
 
 #[tokio::test]
-async fn test() {
+async fn test_general_flow() {
     eprintln!(); // to start test logs from new line
 
     // Start substrate contracts node and wait.
