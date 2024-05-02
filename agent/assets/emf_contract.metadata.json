@@ -1,0 +1,1824 @@
+{
+  "source": {
+    "hash": "0xb0f6410bf5334bfb5ca18aa9010768e22fcc49156a7446b0a6f46c4620cd27bf",
+    "language": "ink! 5.0.0",
+    "compiler": "rustc 1.77.2",
+    "build_info": {
+      "build_mode": "Debug",
+      "cargo_contract_version": "4.1.1",
+      "rust_toolchain": "stable-aarch64-apple-darwin",
+      "wasm_opt_settings": {
+        "keep_debug_symbols": false,
+        "optimization_passes": "Z"
+      }
+    }
+  },
+  "contract": {
+    "name": "emf_contract",
+    "version": "0.1.0",
+    "authors": [
+      "Staex"
+    ]
+  },
+  "image": null,
+  "spec": {
+    "constructors": [
+      {
+        "args": [
+          {
+            "label": "max_measurement_value",
+            "type": {
+              "displayName": [
+                "MeasurementType"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "label": "max_measurements_count",
+            "type": {
+              "displayName": [
+                "u8"
+              ],
+              "type": 1
+            }
+          },
+          {
+            "label": "min_time_between_measurements_to_save",
+            "type": {
+              "displayName": [
+                "u64"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "label": "min_time_between_spikes_to_save",
+            "type": {
+              "displayName": [
+                "u64"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "label": "max_time_between_spikes_to_spawn",
+            "type": {
+              "displayName": [
+                "u64"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "label": "min_spikes_count_to_spawn",
+            "type": {
+              "displayName": [
+                "u8"
+              ],
+              "type": 1
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "new",
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink_primitives",
+            "ConstructorResult"
+          ],
+          "type": 26
+        },
+        "selector": "0x9bae9d5e"
+      }
+    ],
+    "docs": [],
+    "environment": {
+      "accountId": {
+        "displayName": [
+          "AccountId"
+        ],
+        "type": 4
+      },
+      "balance": {
+        "displayName": [
+          "Balance"
+        ],
+        "type": 0
+      },
+      "blockNumber": {
+        "displayName": [
+          "BlockNumber"
+        ],
+        "type": 36
+      },
+      "chainExtension": {
+        "displayName": [
+          "ChainExtension"
+        ],
+        "type": 37
+      },
+      "hash": {
+        "displayName": [
+          "Hash"
+        ],
+        "type": 35
+      },
+      "maxEventTopics": 4,
+      "staticBufferSize": 16384,
+      "timestamp": {
+        "displayName": [
+          "Timestamp"
+        ],
+        "type": 2
+      }
+    },
+    "events": [
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "entity",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "docs": [],
+        "label": "EntityCreated",
+        "module_path": "emf_contract::emf_contract",
+        "signature_topic": "0xf6bd9d2ab5c5ce4bf2b294b50bac3e6622fce204190c357be37c167120695e64"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "entity",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "sub_entity",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "location",
+            "type": {
+              "displayName": [
+                "String"
+              ],
+              "type": 11
+            }
+          }
+        ],
+        "docs": [],
+        "label": "SubEntityCreated",
+        "module_path": "emf_contract::emf_contract",
+        "signature_topic": "0x0288c3763a3a87bd83e2b739ad5f40f8c04442fc4d59b3b1615de87bebdb78e1"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "entity",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "sub_entity",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "docs": [],
+        "label": "SubEntityDeleted",
+        "module_path": "emf_contract::emf_contract",
+        "signature_topic": "0x8378ba097ac453baf14196907d350896c7173bdb518dce61f8c3f57541a9ca89"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "entity",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "sub_entity",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "value",
+            "type": {
+              "displayName": [
+                "MeasurementType"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "docs": [],
+        "label": "NewSpike",
+        "module_path": "emf_contract::emf_contract",
+        "signature_topic": "0x9824e8a65dcea1b02549cf34ed59bd0fa407404f443e2928b57891326d1a5350"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "entity",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "sub_entity",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "docs": [],
+        "label": "TooMuchSpikes",
+        "module_path": "emf_contract::emf_contract",
+        "signature_topic": "0xcc3d990d0c8f9b3d63f9ab86bbf68cbe2868cd4c63c7a25da6ef0d7939410025"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "entity",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "sub_entity",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "docs": [],
+        "label": "CertificateReady",
+        "module_path": "emf_contract::emf_contract",
+        "signature_topic": "0xe4f577c5dc6460b18250e28866927b76d24baafc49d3d974d03a7d94053fb40a"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "index",
+            "type": {
+              "displayName": [
+                "CertificateIndexType"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "entity",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "sub_entity",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "docs": [],
+        "label": "CertificateIssued",
+        "module_path": "emf_contract::emf_contract",
+        "signature_topic": "0xb3c572bf9fb1588d2abde075549e50dad5c2dad18d2fe3a269c2fa4ea94f8832"
+      }
+    ],
+    "lang_error": {
+      "displayName": [
+        "ink",
+        "LangError"
+      ],
+      "type": 27
+    },
+    "messages": [
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "create_entity",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 28
+        },
+        "selector": "0xce14f152"
+      },
+      {
+        "args": [
+          {
+            "label": "sub_entity",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "label": "location",
+            "type": {
+              "displayName": [
+                "String"
+              ],
+              "type": 11
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "create_sub_entity",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 28
+        },
+        "selector": "0xa484af70"
+      },
+      {
+        "args": [
+          {
+            "label": "sub_entity",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "delete_sub_entity",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 28
+        },
+        "selector": "0x949e70e8"
+      },
+      {
+        "args": [
+          {
+            "label": "value",
+            "type": {
+              "displayName": [
+                "MeasurementType"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "store_measurement",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 28
+        },
+        "selector": "0x5bd61560"
+      },
+      {
+        "args": [
+          {
+            "label": "value",
+            "type": {
+              "displayName": [
+                "MeasurementType"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "store_measurement_spike",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 28
+        },
+        "selector": "0x868ae729"
+      },
+      {
+        "args": [
+          {
+            "label": "sub_entity",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "check_sub_entity",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 31
+        },
+        "selector": "0xe636752d"
+      },
+      {
+        "args": [
+          {
+            "label": "sub_entity",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "issue_certificate",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 33
+        },
+        "selector": "0x6fa89954"
+      }
+    ]
+  },
+  "storage": {
+    "root": {
+      "layout": {
+        "struct": {
+          "fields": [
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 0
+                }
+              },
+              "name": "max_measurement_value"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 1
+                }
+              },
+              "name": "max_measurements_count"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 2
+                }
+              },
+              "name": "min_time_between_measurements_to_save"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 2
+                }
+              },
+              "name": "min_time_between_spikes_to_save"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 2
+                }
+              },
+              "name": "max_time_between_spikes_to_spawn"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 1
+                }
+              },
+              "name": "min_spikes_count_to_spawn"
+            },
+            {
+              "layout": {
+                "root": {
+                  "layout": {
+                    "struct": {
+                      "fields": [],
+                      "name": "Entity"
+                    }
+                  },
+                  "root_key": "0x2b3cc8b6",
+                  "ty": 3
+                }
+              },
+              "name": "entities"
+            },
+            {
+              "layout": {
+                "root": {
+                  "layout": {
+                    "struct": {
+                      "fields": [
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xc08dbf2c",
+                              "ty": 4
+                            }
+                          },
+                          "name": "entity"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xc08dbf2c",
+                              "ty": 11
+                            }
+                          },
+                          "name": "location"
+                        },
+                        {
+                          "layout": {
+                            "struct": {
+                              "fields": [
+                                {
+                                  "layout": {
+                                    "leaf": {
+                                      "key": "0xc08dbf2c",
+                                      "ty": 12
+                                    }
+                                  },
+                                  "name": "0"
+                                }
+                              ],
+                              "name": "BoundedVec"
+                            }
+                          },
+                          "name": "measurements"
+                        },
+                        {
+                          "layout": {
+                            "struct": {
+                              "fields": [
+                                {
+                                  "layout": {
+                                    "leaf": {
+                                      "key": "0xc08dbf2c",
+                                      "ty": 12
+                                    }
+                                  },
+                                  "name": "0"
+                                }
+                              ],
+                              "name": "BoundedVec"
+                            }
+                          },
+                          "name": "spikes"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xc08dbf2c",
+                              "ty": 14
+                            }
+                          },
+                          "name": "deleted"
+                        }
+                      ],
+                      "name": "SubEntity"
+                    }
+                  },
+                  "root_key": "0xc08dbf2c",
+                  "ty": 15
+                }
+              },
+              "name": "sub_entities"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 0
+                }
+              },
+              "name": "current_certificate_index"
+            },
+            {
+              "layout": {
+                "root": {
+                  "layout": {
+                    "struct": {
+                      "fields": [
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xee250f76",
+                              "ty": 0
+                            }
+                          },
+                          "name": "index"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xee250f76",
+                              "ty": 4
+                            }
+                          },
+                          "name": "entity"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xee250f76",
+                              "ty": 4
+                            }
+                          },
+                          "name": "sub_entity"
+                        },
+                        {
+                          "layout": {
+                            "enum": {
+                              "dispatchKey": "0xee250f76",
+                              "name": "CertificateStatus",
+                              "variants": {
+                                "0": {
+                                  "fields": [],
+                                  "name": "Ok"
+                                },
+                                "1": {
+                                  "fields": [],
+                                  "name": "Bad"
+                                }
+                              }
+                            }
+                          },
+                          "name": "status"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xee250f76",
+                              "ty": 0
+                            }
+                          },
+                          "name": "min_measurement"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xee250f76",
+                              "ty": 0
+                            }
+                          },
+                          "name": "max_measurement"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xee250f76",
+                              "ty": 0
+                            }
+                          },
+                          "name": "avg_measurement"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xee250f76",
+                              "ty": 2
+                            }
+                          },
+                          "name": "first_measurement_timestamp"
+                        },
+                        {
+                          "layout": {
+                            "leaf": {
+                              "key": "0xee250f76",
+                              "ty": 2
+                            }
+                          },
+                          "name": "last_measurement_timestamp"
+                        }
+                      ],
+                      "name": "Certificate"
+                    }
+                  },
+                  "root_key": "0xee250f76",
+                  "ty": 20
+                }
+              },
+              "name": "certificates"
+            }
+          ],
+          "name": "EmfContract"
+        }
+      },
+      "root_key": "0x00000000",
+      "ty": 25
+    }
+  },
+  "types": [
+    {
+      "id": 0,
+      "type": {
+        "def": {
+          "primitive": "u128"
+        }
+      }
+    },
+    {
+      "id": 1,
+      "type": {
+        "def": {
+          "primitive": "u8"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": {
+        "def": {
+          "primitive": "u64"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "K",
+            "type": 4
+          },
+          {
+            "name": "V",
+            "type": 6
+          },
+          {
+            "name": "KeyType",
+            "type": 7
+          }
+        ],
+        "path": [
+          "ink_storage",
+          "lazy",
+          "mapping",
+          "Mapping"
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "type": 5,
+                "typeName": "[u8; 32]"
+              }
+            ]
+          }
+        },
+        "path": [
+          "ink_primitives",
+          "types",
+          "AccountId"
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "type": {
+        "def": {
+          "array": {
+            "len": 32,
+            "type": 1
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "path": [
+          "emf_contract",
+          "emf_contract",
+          "Entity"
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "L",
+            "type": 8
+          },
+          {
+            "name": "R",
+            "type": 9
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ResolverKey"
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "AutoKey"
+        ]
+      }
+    },
+    {
+      "id": 9,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "ParentKey",
+            "type": 10
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ManualKey"
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "type": {
+        "def": {
+          "tuple": []
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": {
+        "def": {
+          "primitive": "str"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": {
+        "def": {
+          "sequence": {
+            "type": 13
+          }
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "name": "value",
+                "type": 0,
+                "typeName": "MeasurementType"
+              },
+              {
+                "name": "timestamp",
+                "type": 2,
+                "typeName": "u64"
+              }
+            ]
+          }
+        },
+        "path": [
+          "emf_contract",
+          "emf_contract",
+          "Measurement"
+        ]
+      }
+    },
+    {
+      "id": 14,
+      "type": {
+        "def": {
+          "primitive": "bool"
+        }
+      }
+    },
+    {
+      "id": 15,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "K",
+            "type": 4
+          },
+          {
+            "name": "V",
+            "type": 16
+          },
+          {
+            "name": "KeyType",
+            "type": 18
+          }
+        ],
+        "path": [
+          "ink_storage",
+          "lazy",
+          "mapping",
+          "Mapping"
+        ]
+      }
+    },
+    {
+      "id": 16,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "name": "entity",
+                "type": 4,
+                "typeName": "AccountId"
+              },
+              {
+                "name": "location",
+                "type": 11,
+                "typeName": "String"
+              },
+              {
+                "name": "measurements",
+                "type": 17,
+                "typeName": "BoundedVec<Measurement>"
+              },
+              {
+                "name": "spikes",
+                "type": 17,
+                "typeName": "BoundedVec<Measurement>"
+              },
+              {
+                "name": "deleted",
+                "type": 14,
+                "typeName": "bool"
+              }
+            ]
+          }
+        },
+        "path": [
+          "emf_contract",
+          "emf_contract",
+          "SubEntity"
+        ]
+      }
+    },
+    {
+      "id": 17,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "type": 12,
+                "typeName": "VecDeque<T>"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 13
+          }
+        ],
+        "path": [
+          "emf_contract",
+          "emf_contract",
+          "BoundedVec"
+        ]
+      }
+    },
+    {
+      "id": 18,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "L",
+            "type": 8
+          },
+          {
+            "name": "R",
+            "type": 19
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ResolverKey"
+        ]
+      }
+    },
+    {
+      "id": 19,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "ParentKey",
+            "type": 10
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ManualKey"
+        ]
+      }
+    },
+    {
+      "id": 20,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "K",
+            "type": 0
+          },
+          {
+            "name": "V",
+            "type": 21
+          },
+          {
+            "name": "KeyType",
+            "type": 23
+          }
+        ],
+        "path": [
+          "ink_storage",
+          "lazy",
+          "mapping",
+          "Mapping"
+        ]
+      }
+    },
+    {
+      "id": 21,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "name": "index",
+                "type": 0,
+                "typeName": "CertificateIndexType"
+              },
+              {
+                "name": "entity",
+                "type": 4,
+                "typeName": "AccountId"
+              },
+              {
+                "name": "sub_entity",
+                "type": 4,
+                "typeName": "AccountId"
+              },
+              {
+                "name": "status",
+                "type": 22,
+                "typeName": "CertificateStatus"
+              },
+              {
+                "name": "min_measurement",
+                "type": 0,
+                "typeName": "MeasurementType"
+              },
+              {
+                "name": "max_measurement",
+                "type": 0,
+                "typeName": "MeasurementType"
+              },
+              {
+                "name": "avg_measurement",
+                "type": 0,
+                "typeName": "MeasurementType"
+              },
+              {
+                "name": "first_measurement_timestamp",
+                "type": 2,
+                "typeName": "u64"
+              },
+              {
+                "name": "last_measurement_timestamp",
+                "type": 2,
+                "typeName": "u64"
+              }
+            ]
+          }
+        },
+        "path": [
+          "emf_contract",
+          "emf_contract",
+          "Certificate"
+        ]
+      }
+    },
+    {
+      "id": 22,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "index": 1,
+                "name": "Bad"
+              }
+            ]
+          }
+        },
+        "path": [
+          "emf_contract",
+          "emf_contract",
+          "CertificateStatus"
+        ]
+      }
+    },
+    {
+      "id": 23,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "L",
+            "type": 8
+          },
+          {
+            "name": "R",
+            "type": 24
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ResolverKey"
+        ]
+      }
+    },
+    {
+      "id": 24,
+      "type": {
+        "def": {
+          "composite": {}
+        },
+        "params": [
+          {
+            "name": "ParentKey",
+            "type": 10
+          }
+        ],
+        "path": [
+          "ink_storage_traits",
+          "impls",
+          "ManualKey"
+        ]
+      }
+    },
+    {
+      "id": 25,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "name": "max_measurement_value",
+                "type": 0,
+                "typeName": "<MeasurementType as::ink::storage::traits::AutoStorableHint<::ink\n::storage::traits::ManualKey<3224465028u32, ()>,>>::Type"
+              },
+              {
+                "name": "max_measurements_count",
+                "type": 1,
+                "typeName": "<u8 as::ink::storage::traits::AutoStorableHint<::ink::storage::\ntraits::ManualKey<1012312698u32, ()>,>>::Type"
+              },
+              {
+                "name": "min_time_between_measurements_to_save",
+                "type": 2,
+                "typeName": "<u64 as::ink::storage::traits::AutoStorableHint<::ink::storage\n::traits::ManualKey<1945874052u32, ()>,>>::Type"
+              },
+              {
+                "name": "min_time_between_spikes_to_save",
+                "type": 2,
+                "typeName": "<u64 as::ink::storage::traits::AutoStorableHint<::ink::storage\n::traits::ManualKey<2026660659u32, ()>,>>::Type"
+              },
+              {
+                "name": "max_time_between_spikes_to_spawn",
+                "type": 2,
+                "typeName": "<u64 as::ink::storage::traits::AutoStorableHint<::ink::storage\n::traits::ManualKey<200068610u32, ()>,>>::Type"
+              },
+              {
+                "name": "min_spikes_count_to_spawn",
+                "type": 1,
+                "typeName": "<u8 as::ink::storage::traits::AutoStorableHint<::ink::storage::\ntraits::ManualKey<3038972699u32, ()>,>>::Type"
+              },
+              {
+                "name": "entities",
+                "type": 3,
+                "typeName": "<Mapping<AccountId, Entity> as::ink::storage::traits::\nAutoStorableHint<::ink::storage::traits::ManualKey<3066575915u32,\n()>,>>::Type"
+              },
+              {
+                "name": "sub_entities",
+                "type": 15,
+                "typeName": "<Mapping<AccountId, SubEntity> as::ink::storage::traits::\nAutoStorableHint<::ink::storage::traits::ManualKey<750751168u32, ()\n>,>>::Type"
+              },
+              {
+                "name": "current_certificate_index",
+                "type": 0,
+                "typeName": "<CertificateIndexType as::ink::storage::traits::AutoStorableHint<::\nink::storage::traits::ManualKey<2069834960u32, ()>,>>::Type"
+              },
+              {
+                "name": "certificates",
+                "type": 20,
+                "typeName": "<Mapping<CertificateIndexType, Certificate> as::ink::storage::traits\n::AutoStorableHint<::ink::storage::traits::ManualKey<\n1980704238u32, ()>,>>::Type"
+              }
+            ]
+          }
+        },
+        "path": [
+          "emf_contract",
+          "emf_contract",
+          "EmfContract"
+        ]
+      }
+    },
+    {
+      "id": 26,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 10
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 27
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 10
+          },
+          {
+            "name": "E",
+            "type": 27
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 27,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 1,
+                "name": "CouldNotReadInput"
+              }
+            ]
+          }
+        },
+        "path": [
+          "ink_primitives",
+          "LangError"
+        ]
+      }
+    },
+    {
+      "id": 28,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 29
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 27
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 29
+          },
+          {
+            "name": "E",
+            "type": 27
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 29,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 10
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 30
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 10
+          },
+          {
+            "name": "E",
+            "type": 30
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 30,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "EntityAlreadyExists"
+              },
+              {
+                "index": 1,
+                "name": "EntityNotFound"
+              },
+              {
+                "index": 2,
+                "name": "SubEntityAlreadyExists"
+              },
+              {
+                "index": 3,
+                "name": "SubEntityNotFound"
+              },
+              {
+                "index": 4,
+                "name": "SubEntityBelongingFailed"
+              },
+              {
+                "index": 5,
+                "name": "SubEntityAlreadyDeleted"
+              },
+              {
+                "index": 6,
+                "name": "StorageExceeded"
+              },
+              {
+                "index": 7,
+                "name": "MeasurementTooFast"
+              },
+              {
+                "index": 8,
+                "name": "NotEnoughRecords"
+              },
+              {
+                "index": 9,
+                "name": "Unknown"
+              }
+            ]
+          }
+        },
+        "path": [
+          "emf_contract",
+          "emf_contract",
+          "EmfError"
+        ]
+      }
+    },
+    {
+      "id": 31,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 32
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 27
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 32
+          },
+          {
+            "name": "E",
+            "type": 27
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 32,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 14
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 30
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 14
+          },
+          {
+            "name": "E",
+            "type": 30
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 33,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 34
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 27
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 34
+          },
+          {
+            "name": "E",
+            "type": 27
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 34,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 0
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 30
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 0
+          },
+          {
+            "name": "E",
+            "type": 30
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 35,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "type": 5,
+                "typeName": "[u8; 32]"
+              }
+            ]
+          }
+        },
+        "path": [
+          "ink_primitives",
+          "types",
+          "Hash"
+        ]
+      }
+    },
+    {
+      "id": 36,
+      "type": {
+        "def": {
+          "primitive": "u32"
+        }
+      }
+    },
+    {
+      "id": 37,
+      "type": {
+        "def": {
+          "variant": {}
+        },
+        "path": [
+          "ink_env",
+          "types",
+          "NoChainExtension"
+        ]
+      }
+    }
+  ],
+  "version": 5
+}

@@ -7,9 +7,13 @@ edition = "2021"
 log = { version = "0.4.21", features = [], default-features = false }
 env_logger = { version = "0.11.3", features = ["auto-color", "humantime"], default-features = false }
 tokio = { version = "1.37.0", features = ["macros", "io-util", "rt-multi-thread", "sync", "signal", "time", "net"], default-features = false }
-serde = { version = "1.0.198", features = [], default-features = false }
+serde = { version = "1.0.200", features = [], default-features = false }
 serde_json = { version = "1.0.116", features = [], default-features = false }
-subxt = { version = "0.35.3", features = ["native"], default-features = false }
+subxt = { version = "0.35.3", features = ["native"], default-features = true }
+subxt-signer = { version = "0.35.3", features = [], default-features = true }
+contract-transcode = { version = "4.1.1", features = [], default-features = false }
+scale = { package = "parity-scale-codec", version = "3.6.9", features = ["derive"], default-features = false }
+pallet-contracts-primitives = { version = "29.0.0", features = [], default-features = true }
 
 [dev-dependencies]
 tokio = { version = "1.37.0", features = ["process"], default-features = false }

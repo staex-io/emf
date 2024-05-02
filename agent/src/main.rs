@@ -10,6 +10,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::{select, sync::watch, time::timeout};
 
+mod contract;
 mod emf_contract;
 mod storage;
 
