@@ -15,7 +15,7 @@ make deploy
 
 ```shell
 cargo contract instantiate \
-		--args 10 --args 30 --args 82800 --args 60 --args 360 --args 10 \
+		--args 10 --args 2 --args 1 --args 1 --args 360 --args 2 \
     ...
 ```
 

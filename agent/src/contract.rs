@@ -1,7 +1,4 @@
-use std::str::from_utf8;
-
 use contract_transcode::{ContractMessageTranscoder, Value};
-use log::trace;
 use pallet_contracts_primitives::ContractExecResult;
 use subxt::{
     backend::legacy::LegacyRpcMethods,
@@ -9,7 +6,7 @@ use subxt::{
     error::{RpcError, TransactionError},
     ext::codec::Encode,
     tx::{Signer, TxPayload, TxStatus},
-    utils::AccountId32,
+    utils::{AccountId32, MultiAddress},
     OnlineClient, PolkadotConfig,
 };
 use subxt_signer::sr25519::Keypair;
@@ -21,9 +18,58 @@ use crate::{
             contracts_node_runtime::RuntimeEvent, frame_system::EventRecord,
             sp_weights::weight_v2::Weight,
         },
+        TransactionApi,
     },
     Error, Res,
 };
+
+pub(crate) async fn create_entity(
+    api: &OnlineClient<PolkadotConfig>,
+    rpc_legacy: &LegacyRpcMethods<PolkadotConfig>,
+    keypair: &Keypair,
+    contract_address: AccountId32,
+) -> Res<()> {
+    let message = "create_entity";
+    let input_data_args: &[String] = &["".to_string(); 0];
+    let dry_run_res =
+        dry_run(rpc_legacy, contract_address.clone(), keypair, message, input_data_args).await?;
+
+    let transcoder = init_transcoder()?;
+    let data = transcoder.encode(message, input_data_args)?;
+    let call = (TransactionApi {}).contracts().call(
+        MultiAddress::Id(contract_address),
+        0,
+        dry_run_res.gas_required,
+        None,
+        data,
+    );
+    submit_tx(api, rpc_legacy, &call, keypair).await
+}
+
+pub(crate) async fn create_sub_entity(
+    api: &OnlineClient<PolkadotConfig>,
+    rpc_legacy: &LegacyRpcMethods<PolkadotConfig>,
+    keypair: &Keypair,
+    contract_address: AccountId32,
+    sub_entity: AccountId32,
+    location: String,
+) -> Res<()> {
+    let message = "create_sub_entity";
+    let input_data_args: &[String] = &[format!("\"{sub_entity}\""), format!("\"{location}\"")];
+    let dry_run_res =
+        dry_run(rpc_legacy, contract_address.clone(), keypair, message, input_data_args).await?;
+
+    let transcoder = init_transcoder()?;
+    let data = transcoder.encode(message, input_data_args)?;
+    let call = (TransactionApi {}).contracts().call(
+        MultiAddress::Id(contract_address),
+        0,
+        dry_run_res.gas_required,
+        None,
+        data,
+    );
+    submit_tx(api, rpc_legacy, &call, keypair).await
+}
 
 #[cfg_attr(test, derive(Debug))]
 struct DryRunResult {
@@ -49,12 +95,16 @@ impl DryRunResult {
     }
 }
 
+fn init_transcoder() -> Res<ContractMessageTranscoder> {
+    Ok(ContractMessageTranscoder::load("assets/emf_contract.metadata.json")?)
+}
+
 async fn submit_tx<Call: TxPayload, S: Signer<PolkadotConfig>>(
     api: &OnlineClient<PolkadotConfig>,
     rpc_legacy: &LegacyRpcMethods<PolkadotConfig>,
     call: &Call,
     signer: &S,
-) -> Result<(), Error> {
+) -> Res<()> {
     let account_id = signer.account_id();
     let account_nonce = get_nonce(api, rpc_legacy, &account_id).await?;
     let params = PolkadotExtrinsicParamsBuilder::new().nonce(account_nonce).build();
@@ -73,14 +123,14 @@ async fn submit_tx<Call: TxPayload, S: Signer<PolkadotConfig>>(
     Err(RpcError::SubscriptionDropped.into())
 }
 
-pub(crate) async fn dry_run(
+async fn dry_run(
     rpc_legacy: &LegacyRpcMethods<PolkadotConfig>,
     contract_addr: AccountId32,
     keypair: &Keypair,
     message: &str,
-    input_data_args: Vec<String>,
-) -> Result<DryRunResult, Error> {
-    let transcoder = ContractMessageTranscoder::load("assets/emf_contract.metadata.json")?;
+    input_data_args: &[String],
+) -> Res<DryRunResult> {
+    let transcoder = init_transcoder()?;
     let input_data = transcoder.encode(message, input_data_args)?;
     let args = Call {
         origin: keypair.public_key().to_account_id(),
@@ -94,9 +144,12 @@ pub(crate) async fn dry_run(
     let bytes = rpc_legacy.state_call("ContractsApi_call", Some(&args), None).await?;
     let exec_res: ContractExecResult<u128, EventRecord<RuntimeEvent, H256>> =
         scale::decode_from_bytes(bytes.clone().into())?;
-    let exec_res_data = exec_res.result.unwrap();
+    let exec_res_data = exec_res.result.map_err(|_| "failed to parse exec result".to_string())?;
+    if exec_res_data.did_revert() {
+        let data = transcoder.decode_message_return(message, &mut exec_res_data.data.as_slice())?;
+        return Err(parse_revert(data));
+    }
     let data = transcoder.decode_message_return(message, &mut exec_res_data.data.as_ref())?;
-    trace!("message logs: {}: {:?}", message, from_utf8(&exec_res.debug_message).unwrap());
     Ok(DryRunResult {
         data,
         gas_required: Weight {
@@ -110,13 +163,26 @@ async fn get_nonce(
     api: &OnlineClient<PolkadotConfig>,
     rpc_legacy: &LegacyRpcMethods<PolkadotConfig>,
     account_id: &AccountId32,
-) -> Result<u64, Error> {
+) -> Res<u64> {
     let best_block = rpc_legacy
         .chain_get_block_hash(None)
         .await?
         .ok_or(subxt::Error::Other("best block not found".into()))?;
     let account_nonce = api.blocks().at(best_block).await?.account_nonce(account_id).await?;
     Ok(account_nonce)
+}
+
+fn parse_revert(value: Value) -> Error {
+    if let Value::Tuple(value) = value {
+        if let Some(Value::Tuple(value)) = value.values().next() {
+            if let Some(Value::Tuple(value)) = value.values().next() {
+                if let Some(ident) = value.ident() {
+                    return format!("revert error: {ident}").into();
+                }
+            }
+        }
+    }
+    "unknown response to parse revert state".into()
 }
 
 #[cfg(test)]
@@ -128,32 +194,28 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_store_measurement() {
+    // #[ignore = "require substrate contracts node manual starting"]
+    async fn test_entities_creation() {
         let rpc_url = "ws://127.0.0.1:9944";
-        // let api = OnlineClient::<PolkadotConfig>::from_url(rpc_url).await.unwrap();
+        let api = OnlineClient::<PolkadotConfig>::from_url(rpc_url).await.unwrap();
         let rpc = rpc::RpcClient::from_url(rpc_url).await.unwrap();
         let rpc_legacy: LegacyRpcMethods<PolkadotConfig> = LegacyRpcMethods::new(rpc.clone());
 
         let contract_address: AccountId32 =
-            AccountId32::from_str("5H8Q9Aw8msKdaATtGByZXK257NxFZwfcv896eoY895B4fotk").unwrap();
-        let keypair = subxt_signer::sr25519::dev::alice();
+            AccountId32::from_str("5Da8RgQpGdFFVHuT7CcMiREL4AAikfXfH4hytTFywMX5LqEP").unwrap();
+        let entity_keypair = subxt_signer::sr25519::dev::alice();
+        let sub_entity_keypair = subxt_signer::sr25519::dev::bob();
 
-        let message = "create_entity";
-        let input_data_args: Vec<String> = vec![];
-        let dry_run_res =
-            dry_run(&rpc_legacy, contract_address, &keypair, message, input_data_args.clone())
-                .await
-                .unwrap();
-
-        eprintln!("{:?}", dry_run_res);
-        // let data = self.transcoder.encode(message, input_data_args)?;
-        // let call = (TransactionApi {}).contracts().call(
-        //     MultiAddress::Id(self.did.contract_address.clone()),
-        //     0,
-        //     dry_run_res.gas_required.into(),
-        //     None,
-        //     data,
-        // );
-        // self.submit_tx(&call, &self.keypair).await
+        create_entity(&api, &rpc_legacy, &entity_keypair, contract_address.clone()).await.unwrap();
+        create_sub_entity(
+            &api,
+            &rpc_legacy,
+            &entity_keypair,
+            contract_address,
+            sub_entity_keypair.public_key().to_account_id(),
+            "Berlin".to_string(),
+        )
+        .await
+        .unwrap();
     }
 }
