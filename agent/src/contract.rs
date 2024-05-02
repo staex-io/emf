@@ -194,7 +194,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    // #[ignore = "require substrate contracts node manual starting"]
+    #[ignore = "require substrate contracts node manual starting"]
     async fn test_entities_creation() {
         let rpc_url = "ws://127.0.0.1:9944";
         let api = OnlineClient::<PolkadotConfig>::from_url(rpc_url).await.unwrap();
