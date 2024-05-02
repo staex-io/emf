@@ -23,7 +23,56 @@ use crate::{
     Error, Res,
 };
 
-pub(crate) async fn create_entity(
+pub(crate) async fn store_measurement(
+    api: &OnlineClient<PolkadotConfig>,
+    rpc_legacy: &LegacyRpcMethods<PolkadotConfig>,
+    keypair: &Keypair,
+    contract_address: AccountId32,
+    value: u128,
+) -> Res<()> {
+    let message = "store_measurement";
+    let input_data_args: &[String] = &[value.to_string()];
+    let dry_run_res =
+        dry_run(rpc_legacy, contract_address.clone(), keypair, message, input_data_args).await?;
+
+    let transcoder = init_transcoder()?;
+    let data = transcoder.encode(message, input_data_args)?;
+    let call = (TransactionApi {}).contracts().call(
+        MultiAddress::Id(contract_address),
+        0,
+        dry_run_res.gas_required,
+        None,
+        data,
+    );
+    submit_tx(api, rpc_legacy, &call, keypair).await
+}
+
+pub(crate) async fn store_measurement_spike(
+    api: &OnlineClient<PolkadotConfig>,
+    rpc_legacy: &LegacyRpcMethods<PolkadotConfig>,
+    keypair: &Keypair,
+    contract_address: AccountId32,
+    value: u128,
+) -> Res<()> {
+    let message = "store_measurement_spike";
+    let input_data_args: &[String] = &[value.to_string()];
+    let dry_run_res =
+        dry_run(rpc_legacy, contract_address.clone(), keypair, message, input_data_args).await?;
+
+    let transcoder = init_transcoder()?;
+    let data = transcoder.encode(message, input_data_args)?;
+    let call = (TransactionApi {}).contracts().call(
+        MultiAddress::Id(contract_address),
+        0,
+        dry_run_res.gas_required,
+        None,
+        data,
+    );
+    submit_tx(api, rpc_legacy, &call, keypair).await
+}
+
+#[cfg(test)]
+async fn create_entity(
     api: &OnlineClient<PolkadotConfig>,
     rpc_legacy: &LegacyRpcMethods<PolkadotConfig>,
     keypair: &Keypair,
@@ -46,7 +95,8 @@ pub(crate) async fn create_entity(
     submit_tx(api, rpc_legacy, &call, keypair).await
 }
 
-pub(crate) async fn create_sub_entity(
+#[cfg(test)]
+async fn create_sub_entity(
     api: &OnlineClient<PolkadotConfig>,
     rpc_legacy: &LegacyRpcMethods<PolkadotConfig>,
     keypair: &Keypair,
@@ -71,27 +121,37 @@ pub(crate) async fn create_sub_entity(
     submit_tx(api, rpc_legacy, &call, keypair).await
 }
 
+#[cfg(test)]
+async fn check_sub_entity(
+    rpc_legacy: &LegacyRpcMethods<PolkadotConfig>,
+    keypair: &Keypair,
+    contract_address: AccountId32,
+    sub_entity: AccountId32,
+) -> Res<bool> {
+    let message = "check_sub_entity";
+    let input_data_args: &[String] = &[format!("\"{sub_entity}\"")];
+    let dry_run_res =
+        dry_run(rpc_legacy, contract_address.clone(), keypair, message, input_data_args).await?;
+    dry_run_res.parse_check_sub_entity()
+}
+
 #[cfg_attr(test, derive(Debug))]
 struct DryRunResult {
-    data: Value,
+    _data: Value,
     gas_required: Weight,
 }
 
+#[cfg(test)]
 impl DryRunResult {
-    fn to_get_message_res(&self) -> Res<bool> {
-        match &self.data {
-            Value::Tuple(t) => {
-                if t.values().count() != 1 {
-                    return Err(format!("unexpected values count: {}", t.values().count()).into());
-                }
-                let value = t.values().last().ok_or::<&str>("last value is not found")?;
-                match value {
-                    Value::Bool(b) => Ok(*b),
-                    _ => Err("unexpected response: value in tuple is not bool".into()),
+    fn parse_check_sub_entity(&self) -> Res<bool> {
+        if let Value::Tuple(value) = &self._data {
+            if let Some(Value::Tuple(value)) = value.values().next() {
+                if let Some(Value::Bool(value)) = value.values().next() {
+                    return Ok(*value);
                 }
             }
-            _ => Err("unexpected response: value is not tuple".into()),
         }
+        Err("unknown response format".into())
     }
 }
 
@@ -151,7 +211,7 @@ async fn dry_run(
     }
     let data = transcoder.decode_message_return(message, &mut exec_res_data.data.as_ref())?;
     Ok(DryRunResult {
-        data,
+        _data: data,
         gas_required: Weight {
             ref_time: exec_res.gas_required.ref_time(),
             proof_size: exec_res.gas_required.proof_size(),
@@ -187,9 +247,12 @@ fn parse_revert(value: Value) -> Error {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::{str::FromStr, time::Duration};
 
     use subxt::backend::rpc;
+    use tokio::time::sleep;
+
+    use crate::emf_contract::api;
 
     use super::*;
 
@@ -202,7 +265,7 @@ mod tests {
         let rpc_legacy: LegacyRpcMethods<PolkadotConfig> = LegacyRpcMethods::new(rpc.clone());
 
         let contract_address: AccountId32 =
-            AccountId32::from_str("5Da8RgQpGdFFVHuT7CcMiREL4AAikfXfH4hytTFywMX5LqEP").unwrap();
+            AccountId32::from_str("5Ccs3SPZLqiLKxpfm9TQKLUXXKiEdUMjgVdZPr8NCe4bCSkF").unwrap();
         let entity_keypair = subxt_signer::sr25519::dev::alice();
         let sub_entity_keypair = subxt_signer::sr25519::dev::bob();
 
@@ -211,11 +274,67 @@ mod tests {
             &api,
             &rpc_legacy,
             &entity_keypair,
-            contract_address,
+            contract_address.clone(),
             sub_entity_keypair.public_key().to_account_id(),
             "Berlin".to_string(),
         )
         .await
         .unwrap();
+
+        let check_res = check_sub_entity(
+            &rpc_legacy,
+            &sub_entity_keypair,
+            contract_address.clone(),
+            sub_entity_keypair.public_key().to_account_id(),
+        )
+        .await;
+        eprintln!("{:?}", check_res);
+
+        for i in 0..3 {
+            store_measurement(
+                &api,
+                &rpc_legacy,
+                &sub_entity_keypair,
+                contract_address.clone(),
+                i + 1,
+            )
+            .await
+            .unwrap();
+
+            sleep(Duration::from_millis(1100)).await;
+
+            // To increase block timestamp between measurements we need to make some transaction.
+            // Otherwise timestamp on new measurement save will be the same
+            // and we will get too fast revert error.
+            let transfer_tx = api::tx()
+                .balances()
+                .transfer_allow_death(sub_entity_keypair.public_key().into(), 1);
+            api.tx()
+                .sign_and_submit_then_watch_default(&transfer_tx, &entity_keypair)
+                .await
+                .unwrap()
+                .wait_for_finalized()
+                .await
+                .unwrap();
+        }
+
+        store_measurement_spike(
+            &api,
+            &rpc_legacy,
+            &sub_entity_keypair,
+            contract_address.clone(),
+            12,
+        )
+        .await
+        .unwrap();
+
+        let check_res = check_sub_entity(
+            &rpc_legacy,
+            &sub_entity_keypair,
+            contract_address.clone(),
+            sub_entity_keypair.public_key().to_account_id(),
+        )
+        .await;
+        eprintln!("{:?}", check_res);
     }
 }

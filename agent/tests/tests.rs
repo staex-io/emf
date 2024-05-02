@@ -65,15 +65,15 @@ async fn deploy_smart_contract() -> String {
             "--args",
             "10",
             "--args",
-            "30",
+            "2",
             "--args",
-            "82800",
+            "1",
             "--args",
-            "60",
+            "1",
             "--args",
             "360",
             "--args",
-            "9",
+            "2",
             "-x",
             "--skip-confirm",
         ])
@@ -101,7 +101,7 @@ async fn deploy_smart_contract() -> String {
 }
 
 fn start_agent() -> ChildProcess {
-    let child = tokio::process::Command::new("../target/debug/agent")
+    let child = tokio::process::Command::new("target/debug/agent")
         .env("RUST_LOG", "TRACE")
         .kill_on_drop(true)
         .stdin(Stdio::null())
@@ -133,7 +133,51 @@ async fn test_general_flow() {
     });
     timeout(Duration::from_secs(10), scn_r).await.unwrap().unwrap();
 
-    let _smart_contract_address = deploy_smart_contract().await;
+    let smart_contract_address = deploy_smart_contract().await;
+    eprintln!("Smart contract address {smart_contract_address}");
+
+    let res = std::process::Command::new("cargo")
+        .args(vec![
+            "contract",
+            "call",
+            "--contract",
+            &smart_contract_address,
+            "--message",
+            "create_entity",
+            "--suri",
+            "//Alice",
+            "-x",
+            "--skip-confirm",
+        ])
+        .current_dir("../emf_contract")
+        .output()
+        .unwrap();
+    assert!(res.status.success());
+
+    let res = std::process::Command::new("cargo")
+        .args(vec![
+            "contract",
+            "call",
+            "--contract",
+            &smart_contract_address,
+            "--message",
+            "create_sub_entity",
+            "--suri",
+            "//Alice",
+            "-x",
+            "--skip-confirm",
+            "--args",
+            &format!(
+                "\"{}\"",
+                &subxt_signer::sr25519::dev::bob().public_key().to_account_id().to_string()
+            ),
+            "--args",
+            "\"Berlin\"",
+        ])
+        .current_dir("../emf_contract")
+        .output()
+        .unwrap();
+    assert!(res.status.success());
 
     let mut agent_child = start_agent();
     let agent_stderr = agent_child.child.stderr.take().unwrap();
@@ -152,13 +196,19 @@ async fn test_general_flow() {
                 let agent_unix_socket = parts[1][..parts[1].len() - 1].to_string();
                 agent_s.send(agent_unix_socket).unwrap();
                 return;
+                // // Continue to read logs.
+                // loop {
+                //     let mut buf = String::new();
+                //     agent_reader.read_line(&mut buf).await.unwrap();
+                //     eprintln!("Agent log: {buf}");
+                // }
             }
         }
     });
     let tcp_server_address = timeout(Duration::from_secs(10), agent_r).await.unwrap().unwrap();
 
     let mut stream = TcpStream::connect(tcp_server_address).await.unwrap();
-    const VALUE: u128 = 111;
+    const VALUE: u128 = 6;
     let mut buf = serde_json::to_vec(&RpcRequest { value: VALUE }).unwrap();
     buf.push(b'\n');
     timeout(Duration::from_secs(3), stream.write_all(&buf)).await.unwrap().unwrap();
