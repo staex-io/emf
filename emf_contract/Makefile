@@ -20,6 +20,8 @@ deploy: build
 		--no-docs | \
 		rustfmt --edition=2021 --emit=stdout > ../agent/src/emf_contract.rs
 	cp target/ink/emf_contract.json ../agent/assets/emf_contract.metadata.json
+	mv emf.metadata.scale ../agent/assets/emf_contract.metadata.scale
+	cp ../agent/src/emf_contract.rs ../agent/tests/emf_contract.rs
 
 run_substrate:
 	rm -rf data-substrate ; substrate-contracts-node \

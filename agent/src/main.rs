@@ -161,7 +161,6 @@ async fn write(stream: &mut TcpStream, buf: &mut Vec<u8>) -> Res<()> {
 }
 
 async fn handle_rpc_request(req: &RpcRequest, state: State) -> Res<()> {
-    let last_iteration = storage::save(STORAGE_FILEPATH, req.value)?;
     if req.value > MAX_MEASUREMENT_VALUE {
         return store_measurement_spike(
             &state.api,
@@ -172,6 +171,7 @@ async fn handle_rpc_request(req: &RpcRequest, state: State) -> Res<()> {
         )
         .await;
     }
+    let last_iteration = storage::save(STORAGE_FILEPATH, req.value)?;
     if !last_iteration.is_empty() {
         let mut avg_value = 0;
         for value in &last_iteration {

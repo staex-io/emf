@@ -1,12 +1,28 @@
-use std::{process::Stdio, str::from_utf8, time::Duration};
+use std::{collections::HashMap, process::Stdio, str::from_utf8, time::Duration};
 
+use contract_transcode::ContractMessageTranscoder;
+use emf_contract::api::{
+    self,
+    runtime_types::{
+        contracts_node_runtime::RuntimeEvent, pallet_contracts::pallet::Event as ContractsEvent,
+    },
+};
 use serde::{Deserialize, Serialize};
+use subxt::{
+    events::{Events, StaticEvent},
+    ext::sp_core::bytes::to_hex,
+    OnlineClient, PolkadotConfig,
+};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
     sync::oneshot,
-    time::timeout,
+    time::{sleep, timeout},
 };
+
+use crate::emf_contract::api::contracts::events::ContractEmitted;
+
+mod emf_contract;
 
 #[derive(Serialize, Deserialize)]
 struct RpcRequest {
@@ -103,6 +119,7 @@ async fn deploy_smart_contract() -> String {
 fn start_agent() -> ChildProcess {
     let child = tokio::process::Command::new("target/debug/agent")
         .env("RUST_LOG", "TRACE")
+        .env("TIME_TO_ACCUMULATE", "1")
         .kill_on_drop(true)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -153,23 +170,63 @@ async fn test_general_flow() {
                 // Remove \n at the end.
                 let agent_unix_socket = parts[1][..parts[1].len() - 1].to_string();
                 agent_s.send(agent_unix_socket).unwrap();
-                return;
-                // Uncomment following lines for debug.
-                // // Continue to read logs.
-                // loop {
-                //     let mut buf = String::new();
-                //     agent_reader.read_line(&mut buf).await.unwrap();
-                //     eprintln!("Agent log: {buf}");
-                // }
+                // Continue to read logs.
+                loop {
+                    let mut buf = String::new();
+                    agent_reader.read_line(&mut buf).await.unwrap();
+                    eprint!("Agent log: {buf}");
+                }
             }
         }
     });
     let tcp_server_address = timeout(Duration::from_secs(10), agent_r).await.unwrap().unwrap();
 
+    eprintln!(
+        "Entity account id: {} - {:?}",
+        subxt_signer::sr25519::dev::alice().public_key().to_account_id(),
+        subxt_signer::sr25519::dev::alice().public_key().to_account_id().0
+    );
+    eprintln!(
+        "Sub-entity account id: {} - {:?}",
+        subxt_signer::sr25519::dev::bob().public_key().to_account_id(),
+        subxt_signer::sr25519::dev::bob().public_key().to_account_id().0
+    );
+
+    let rpc_url = "ws://127.0.0.1:9944";
+    let api = OnlineClient::<PolkadotConfig>::from_url(rpc_url).await.unwrap();
+
+    let mut subscription = api.blocks().subscribe_finalized().await.unwrap();
+    tokio::spawn(async move {
+        loop {
+            let block = subscription.next().await.unwrap().unwrap();
+            let events = block.events().await.unwrap();
+            process_event(events);
+        }
+    });
+    // Wait 1s for block subscription logic and so ont.
+    sleep(Duration::from_secs(2)).await;
+
     create_entity(&smart_contract_address);
     create_sub_entity(&smart_contract_address);
 
-    rpc_store_measurement(&tcp_server_address).await;
+    // We need to make some rpc requests to store measurements.
+    // We cannot estimate exact number of rpc requests to reach certificate ready
+    // smart contract ready.
+    // Because our software (agent) accumulate several measurement before save
+    // we do not know how many rpc requests we need to make.
+    for _ in 0..6 {
+        rpc_store_measurement(&tcp_server_address).await;
+
+        // To not make our transaction outdated after executing smart contract (store measurement).
+        sleep(Duration::from_millis(1050)).await;
+        increase_block_timestamp(&api).await;
+
+        // Wait some time before save new measurement to avoid too fast revert error.
+        sleep(Duration::from_millis(1050)).await;
+    }
+
+    // todo: remove it after waiting for exact event by channel
+    sleep(Duration::from_secs(10)).await;
 }
 
 fn create_entity(smart_contract_address: &str) {
@@ -229,4 +286,41 @@ async fn rpc_store_measurement(tcp_server_address: &str) {
     timeout(Duration::from_secs(3), stream.read_to_end(&mut buf)).await.unwrap().unwrap();
     let res: RpcResponse = serde_json::from_slice(&buf).unwrap();
     assert_eq!(VALUE, res.value);
+}
+
+async fn increase_block_timestamp(api: &OnlineClient<PolkadotConfig>) {
+    // To increase block timestamp between measurements we need to make some transaction.
+    // Otherwise timestamp on new measurement save will be the same
+    // and we will get too fast revert error.
+    let transfer_tx = api::tx()
+        .balances()
+        .transfer_allow_death(subxt_signer::sr25519::dev::alice().public_key().into(), 1);
+    api.tx()
+        .sign_and_submit_then_watch_default(&transfer_tx, &subxt_signer::sr25519::dev::bob())
+        .await
+        .unwrap()
+        .wait_for_finalized()
+        .await
+        .unwrap();
+}
+
+fn process_event(events: Events<PolkadotConfig>) {
+    let transcoder = ContractMessageTranscoder::load("assets/emf_contract.metadata.json").unwrap();
+    // Topic hash to it's name.
+    let mut topics: HashMap<String, String> = HashMap::new();
+    for event_meta in transcoder.metadata().spec().events() {
+        let topic = to_hex(event_meta.signature_topic().unwrap().as_bytes(), false);
+        topics.insert(topic, event_meta.label().clone());
+    }
+    for event in events.iter().flatten() {
+        if event.variant_name() != ContractEmitted::EVENT {
+            continue;
+        }
+        // Usually first topic is our actual smart contract (EMF) event.
+        let topic = event.topics()[0];
+        let event = event.as_root_event::<RuntimeEvent>().unwrap();
+        if let RuntimeEvent::Contracts(ContractsEvent::ContractEmitted { .. }) = event {
+            eprintln!("NEW EVENT: {}", topics.get(&to_hex(&topic.0, false)).unwrap());
+        }
+    }
 }

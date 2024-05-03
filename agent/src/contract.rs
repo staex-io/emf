@@ -1,4 +1,7 @@
+use std::str::from_utf8;
+
 use contract_transcode::{ContractMessageTranscoder, Value};
+use log::trace;
 use pallet_contracts_primitives::ContractExecResult;
 use subxt::{
     backend::legacy::LegacyRpcMethods,
@@ -204,6 +207,9 @@ async fn dry_run(
     let bytes = rpc_legacy.state_call("ContractsApi_call", Some(&args), None).await?;
     let exec_res: ContractExecResult<u128, EventRecord<RuntimeEvent, H256>> =
         scale::decode_from_bytes(bytes.clone().into())?;
+    if !exec_res.debug_message.is_empty() {
+        trace!("debug messages after dry run: {:?}", from_utf8(&exec_res.debug_message));
+    }
     let exec_res_data = exec_res.result.map_err(|_| "failed to parse exec result".to_string())?;
     if exec_res_data.did_revert() {
         let data = transcoder.decode_message_return(message, &mut exec_res_data.data.as_slice())?;
