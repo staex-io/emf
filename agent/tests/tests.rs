@@ -116,7 +116,7 @@ fn start_agent() -> ChildProcess {
 async fn test_general_flow() {
     eprintln!(); // to start test logs from new line
 
-    // Start substrate contracts node and wait.
+    // Start substrate contracts node and wait for its starting.
     let mut scn_child = start_substrate_contracts_node();
     let scn_stderr = scn_child.child.stderr.take().unwrap();
     let mut scn_reader = tokio::io::BufReader::new(scn_stderr);
@@ -125,6 +125,7 @@ async fn test_general_flow() {
         loop {
             let mut buf = String::new();
             scn_reader.read_line(&mut buf).await.unwrap();
+            // By this line we understand that node is up and running.
             if buf.contains("Running JSON-RPC server") {
                 break;
             }
@@ -135,49 +136,6 @@ async fn test_general_flow() {
 
     let smart_contract_address = deploy_smart_contract().await;
     eprintln!("Smart contract address {smart_contract_address}");
-
-    let res = std::process::Command::new("cargo")
-        .args(vec![
-            "contract",
-            "call",
-            "--contract",
-            &smart_contract_address,
-            "--message",
-            "create_entity",
-            "--suri",
-            "//Alice",
-            "-x",
-            "--skip-confirm",
-        ])
-        .current_dir("../emf_contract")
-        .output()
-        .unwrap();
-    assert!(res.status.success());
-
-    let res = std::process::Command::new("cargo")
-        .args(vec![
-            "contract",
-            "call",
-            "--contract",
-            &smart_contract_address,
-            "--message",
-            "create_sub_entity",
-            "--suri",
-            "//Alice",
-            "-x",
-            "--skip-confirm",
-            "--args",
-            &format!(
-                "\"{}\"",
-                &subxt_signer::sr25519::dev::bob().public_key().to_account_id().to_string()
-            ),
-            "--args",
-            "\"Berlin\"",
-        ])
-        .current_dir("../emf_contract")
-        .output()
-        .unwrap();
-    assert!(res.status.success());
 
     let mut agent_child = start_agent();
     let agent_stderr = agent_child.child.stderr.take().unwrap();
@@ -196,6 +154,7 @@ async fn test_general_flow() {
                 let agent_unix_socket = parts[1][..parts[1].len() - 1].to_string();
                 agent_s.send(agent_unix_socket).unwrap();
                 return;
+                // Uncomment following lines for debug.
                 // // Continue to read logs.
                 // loop {
                 //     let mut buf = String::new();
@@ -207,6 +166,60 @@ async fn test_general_flow() {
     });
     let tcp_server_address = timeout(Duration::from_secs(10), agent_r).await.unwrap().unwrap();
 
+    create_entity(&smart_contract_address);
+    create_sub_entity(&smart_contract_address);
+
+    rpc_store_measurement(&tcp_server_address).await;
+}
+
+fn create_entity(smart_contract_address: &str) {
+    let res = std::process::Command::new("cargo")
+        .args(vec![
+            "contract",
+            "call",
+            "--contract",
+            smart_contract_address,
+            "--message",
+            "create_entity",
+            "--suri",
+            "//Alice",
+            "-x",
+            "--skip-confirm",
+        ])
+        .current_dir("../emf_contract")
+        .output()
+        .unwrap();
+    assert!(res.status.success());
+}
+
+fn create_sub_entity(smart_contract_address: &str) {
+    let res = std::process::Command::new("cargo")
+        .args(vec![
+            "contract",
+            "call",
+            "--contract",
+            smart_contract_address,
+            "--message",
+            "create_sub_entity",
+            "--suri",
+            "//Alice",
+            "-x",
+            "--skip-confirm",
+            "--args",
+            &format!(
+                "\"{}\"",
+                &subxt_signer::sr25519::dev::bob().public_key().to_account_id().to_string()
+            ),
+            "--args",
+            "\"Berlin\"",
+        ])
+        .current_dir("../emf_contract")
+        .output()
+        .unwrap();
+    assert!(res.status.success());
+}
+
+async fn rpc_store_measurement(tcp_server_address: &str) {
     let mut stream = TcpStream::connect(tcp_server_address).await.unwrap();
     const VALUE: u128 = 6;
     let mut buf = serde_json::to_vec(&RpcRequest { value: VALUE }).unwrap();
