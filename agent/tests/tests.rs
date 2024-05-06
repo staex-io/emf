@@ -116,9 +116,10 @@ async fn deploy_smart_contract() -> String {
     unreachable!()
 }
 
-fn start_agent() -> ChildProcess {
+fn start_agent(smart_contract_address: &str) -> ChildProcess {
     let child = tokio::process::Command::new("target/debug/agent")
         .env("RUST_LOG", "TRACE")
+        .env("SMART_CONTRACT_ADDRESS", smart_contract_address)
         .env("TIME_TO_ACCUMULATE", "1")
         .kill_on_drop(true)
         .stdin(Stdio::null())
@@ -154,7 +155,7 @@ async fn test_general_flow() {
     let smart_contract_address = deploy_smart_contract().await;
     eprintln!("Smart contract address {smart_contract_address}");
 
-    let mut agent_child = start_agent();
+    let mut agent_child = start_agent(&smart_contract_address);
     let agent_stderr = agent_child.child.stderr.take().unwrap();
     let mut agent_reader = tokio::io::BufReader::new(agent_stderr);
     let (agent_s, agent_r) = oneshot::channel::<String>();
@@ -209,24 +210,19 @@ async fn test_general_flow() {
     create_entity(&smart_contract_address);
     create_sub_entity(&smart_contract_address);
 
+    // Store ok measurements to see certificate ready smart contract event.
     // We need to make some rpc requests to store measurements.
     // We cannot estimate exact number of rpc requests to reach certificate ready
     // smart contract ready.
     // Because our software (agent) accumulate several measurement before save
     // we do not know how many rpc requests we need to make.
-    for _ in 0..6 {
-        rpc_store_measurement(&tcp_server_address).await;
+    store_measurements(&api, &tcp_server_address, 6, 6).await;
 
-        // To not make our transaction outdated after executing smart contract (store measurement).
-        sleep(Duration::from_millis(1050)).await;
-        increase_block_timestamp(&api).await;
-
-        // Wait some time before save new measurement to avoid too fast revert error.
-        sleep(Duration::from_millis(1050)).await;
-    }
+    // Store measurement spikes to see too much spikes smart contract event.
+    store_measurements(&api, &tcp_server_address, 69, 2).await;
 
     // todo: remove it after waiting for exact event by channel
-    sleep(Duration::from_secs(10)).await;
+    sleep(Duration::from_secs(3)).await;
 }
 
 fn create_entity(smart_contract_address: &str) {
@@ -276,16 +272,15 @@ fn create_sub_entity(smart_contract_address: &str) {
     assert!(res.status.success());
 }
 
-async fn rpc_store_measurement(tcp_server_address: &str) {
+async fn rpc_store_measurement(tcp_server_address: &str, value: u128) {
     let mut stream = TcpStream::connect(tcp_server_address).await.unwrap();
-    const VALUE: u128 = 6;
-    let mut buf = serde_json::to_vec(&RpcRequest { value: VALUE }).unwrap();
+    let mut buf = serde_json::to_vec(&RpcRequest { value }).unwrap();
     buf.push(b'\n');
     timeout(Duration::from_secs(3), stream.write_all(&buf)).await.unwrap().unwrap();
     let mut buf: Vec<u8> = Vec::new();
     timeout(Duration::from_secs(3), stream.read_to_end(&mut buf)).await.unwrap().unwrap();
     let res: RpcResponse = serde_json::from_slice(&buf).unwrap();
-    assert_eq!(VALUE, res.value);
+    assert_eq!(value, res.value);
 }
 
 async fn increase_block_timestamp(api: &OnlineClient<PolkadotConfig>) {
@@ -322,5 +317,23 @@ fn process_event(events: Events<PolkadotConfig>) {
         if let RuntimeEvent::Contracts(ContractsEvent::ContractEmitted { .. }) = event {
             eprintln!("NEW EVENT: {}", topics.get(&to_hex(&topic.0, false)).unwrap());
         }
+    }
+}
+
+async fn store_measurements(
+    api: &OnlineClient<PolkadotConfig>,
+    tcp_server_address: &str,
+    value: u128,
+    count: usize,
+) {
+    for _ in 0..count {
+        rpc_store_measurement(tcp_server_address, value).await;
+
+        // To not make our transaction outdated after executing smart contract (store measurement).
+        sleep(Duration::from_millis(1050)).await;
+        increase_block_timestamp(api).await;
+
+        // Wait some time before save new measurement to avoid too fast revert error.
+        sleep(Duration::from_millis(1050)).await;
     }
 }

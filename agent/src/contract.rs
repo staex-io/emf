@@ -1,4 +1,4 @@
-use std::str::from_utf8;
+use std::io::BufRead;
 
 use contract_transcode::{ContractMessageTranscoder, Value};
 use log::trace;
@@ -208,7 +208,10 @@ async fn dry_run(
     let exec_res: ContractExecResult<u128, EventRecord<RuntimeEvent, H256>> =
         scale::decode_from_bytes(bytes.clone().into())?;
     if !exec_res.debug_message.is_empty() {
-        trace!("debug messages after dry run: {:?}", from_utf8(&exec_res.debug_message));
+        let lines = exec_res.debug_message.lines();
+        for line in lines.map_while(Result::ok) {
+            trace!("debug messages after dry run: {}", line);
+        }
     }
     let exec_res_data = exec_res.result.map_err(|_| "failed to parse exec result".to_string())?;
     if exec_res_data.did_revert() {

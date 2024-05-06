@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0xf1680ee5c77dddc325261425d6eb39f3dfb1d255c8f53e60b4c2ecc1045ab4ec",
+    "hash": "0x9899cb31c588e62301969c0f4dcabf209318f08490e8f040f1da314be0f0a1e9",
     "language": "ink! 5.0.0",
     "compiler": "rustc 1.78.0",
     "build_info": {
@@ -47,27 +47,27 @@
             "label": "min_time_between_measurements_to_save",
             "type": {
               "displayName": [
-                "u64"
+                "EmfDuration"
               ],
-              "type": 2
+              "type": 27
             }
           },
           {
             "label": "min_time_between_spikes_to_save",
             "type": {
               "displayName": [
-                "u64"
+                "EmfDuration"
               ],
-              "type": 2
+              "type": 27
             }
           },
           {
             "label": "max_time_between_spikes_to_spawn",
             "type": {
               "displayName": [
-                "u64"
+                "EmfDuration"
               ],
-              "type": 2
+              "type": 27
             }
           },
           {
@@ -89,7 +89,7 @@
             "ink_primitives",
             "ConstructorResult"
           ],
-          "type": 26
+          "type": 28
         },
         "selector": "0x9bae9d5e"
       }
@@ -112,19 +112,19 @@
         "displayName": [
           "BlockNumber"
         ],
-        "type": 36
+        "type": 38
       },
       "chainExtension": {
         "displayName": [
           "ChainExtension"
         ],
-        "type": 37
+        "type": 39
       },
       "hash": {
         "displayName": [
           "Hash"
         ],
-        "type": 35
+        "type": 37
       },
       "maxEventTopics": 4,
       "staticBufferSize": 16384,
@@ -374,7 +374,7 @@
         "ink",
         "LangError"
       ],
-      "type": 27
+      "type": 29
     },
     "messages": [
       {
@@ -389,7 +389,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 28
+          "type": 30
         },
         "selector": "0xce14f152"
       },
@@ -424,7 +424,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 28
+          "type": 30
         },
         "selector": "0xa484af70"
       },
@@ -450,7 +450,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 28
+          "type": 30
         },
         "selector": "0x949e70e8"
       },
@@ -476,7 +476,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 28
+          "type": 30
         },
         "selector": "0x5bd61560"
       },
@@ -502,7 +502,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 28
+          "type": 30
         },
         "selector": "0x868ae729"
       },
@@ -528,7 +528,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 31
+          "type": 33
         },
         "selector": "0xe636752d"
       },
@@ -554,7 +554,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 33
+          "type": 35
         },
         "selector": "0x6fa89954"
       }
@@ -585,27 +585,57 @@
             },
             {
               "layout": {
-                "leaf": {
-                  "key": "0x00000000",
-                  "ty": 2
+                "struct": {
+                  "fields": [
+                    {
+                      "layout": {
+                        "leaf": {
+                          "key": "0x00000000",
+                          "ty": 2
+                        }
+                      },
+                      "name": "0"
+                    }
+                  ],
+                  "name": "EmfDuration"
                 }
               },
               "name": "min_time_between_measurements_to_save"
             },
             {
               "layout": {
-                "leaf": {
-                  "key": "0x00000000",
-                  "ty": 2
+                "struct": {
+                  "fields": [
+                    {
+                      "layout": {
+                        "leaf": {
+                          "key": "0x00000000",
+                          "ty": 2
+                        }
+                      },
+                      "name": "0"
+                    }
+                  ],
+                  "name": "EmfDuration"
                 }
               },
               "name": "min_time_between_spikes_to_save"
             },
             {
               "layout": {
-                "leaf": {
-                  "key": "0x00000000",
-                  "ty": 2
+                "struct": {
+                  "fields": [
+                    {
+                      "layout": {
+                        "leaf": {
+                          "key": "0x00000000",
+                          "ty": 2
+                        }
+                      },
+                      "name": "0"
+                    }
+                  ],
+                  "name": "EmfDuration"
                 }
               },
               "name": "max_time_between_spikes_to_spawn"
@@ -700,7 +730,7 @@
                           "layout": {
                             "leaf": {
                               "key": "0xc08dbf2c",
-                              "ty": 14
+                              "ty": 15
                             }
                           },
                           "name": "deleted"
@@ -710,7 +740,7 @@
                     }
                   },
                   "root_key": "0xc08dbf2c",
-                  "ty": 15
+                  "ty": 16
                 }
               },
               "name": "sub_entities"
@@ -805,18 +835,38 @@
                         },
                         {
                           "layout": {
-                            "leaf": {
-                              "key": "0xee250f76",
-                              "ty": 2
+                            "struct": {
+                              "fields": [
+                                {
+                                  "layout": {
+                                    "leaf": {
+                                      "key": "0xee250f76",
+                                      "ty": 2
+                                    }
+                                  },
+                                  "name": "0"
+                                }
+                              ],
+                              "name": "EmfSystemTime"
                             }
                           },
                           "name": "first_measurement_timestamp"
                         },
                         {
                           "layout": {
-                            "leaf": {
-                              "key": "0xee250f76",
-                              "ty": 2
+                            "struct": {
+                              "fields": [
+                                {
+                                  "layout": {
+                                    "leaf": {
+                                      "key": "0xee250f76",
+                                      "ty": 2
+                                    }
+                                  },
+                                  "name": "0"
+                                }
+                              ],
+                              "name": "EmfSystemTime"
                             }
                           },
                           "name": "last_measurement_timestamp"
@@ -826,7 +876,7 @@
                     }
                   },
                   "root_key": "0xee250f76",
-                  "ty": 20
+                  "ty": 21
                 }
               },
               "name": "certificates"
@@ -836,7 +886,7 @@
         }
       },
       "root_key": "0x00000000",
-      "ty": 25
+      "ty": 26
     }
   },
   "types": [
@@ -1030,8 +1080,8 @@
               },
               {
                 "name": "timestamp",
-                "type": 2,
-                "typeName": "u64"
+                "type": 14,
+                "typeName": "EmfSystemTime"
               }
             ]
           }
@@ -1047,12 +1097,32 @@
       "id": 14,
       "type": {
         "def": {
+          "composite": {
+            "fields": [
+              {
+                "type": 2,
+                "typeName": "u64"
+              }
+            ]
+          }
+        },
+        "path": [
+          "emf_contract",
+          "emf_contract",
+          "EmfSystemTime"
+        ]
+      }
+    },
+    {
+      "id": 15,
+      "type": {
+        "def": {
           "primitive": "bool"
         }
       }
     },
     {
-      "id": 15,
+      "id": 16,
       "type": {
         "def": {
           "composite": {}
@@ -1064,11 +1134,11 @@
           },
           {
             "name": "V",
-            "type": 16
+            "type": 17
           },
           {
             "name": "KeyType",
-            "type": 18
+            "type": 19
           }
         ],
         "path": [
@@ -1080,7 +1150,7 @@
       }
     },
     {
-      "id": 16,
+      "id": 17,
       "type": {
         "def": {
           "composite": {
@@ -1097,17 +1167,17 @@
               },
               {
                 "name": "measurements",
-                "type": 17,
+                "type": 18,
                 "typeName": "BoundedVec<Measurement>"
               },
               {
                 "name": "spikes",
-                "type": 17,
+                "type": 18,
                 "typeName": "BoundedVec<Measurement>"
               },
               {
                 "name": "deleted",
-                "type": 14,
+                "type": 15,
                 "typeName": "bool"
               }
             ]
@@ -1121,7 +1191,7 @@
       }
     },
     {
-      "id": 17,
+      "id": 18,
       "type": {
         "def": {
           "composite": {
@@ -1147,7 +1217,7 @@
       }
     },
     {
-      "id": 18,
+      "id": 19,
       "type": {
         "def": {
           "composite": {}
@@ -1159,7 +1229,7 @@
           },
           {
             "name": "R",
-            "type": 19
+            "type": 20
           }
         ],
         "path": [
@@ -1170,7 +1240,7 @@
       }
     },
     {
-      "id": 19,
+      "id": 20,
       "type": {
         "def": {
           "composite": {}
@@ -1189,7 +1259,7 @@
       }
     },
     {
-      "id": 20,
+      "id": 21,
       "type": {
         "def": {
           "composite": {}
@@ -1201,11 +1271,11 @@
           },
           {
             "name": "V",
-            "type": 21
+            "type": 22
           },
           {
             "name": "KeyType",
-            "type": 23
+            "type": 24
           }
         ],
         "path": [
@@ -1217,7 +1287,7 @@
       }
     },
     {
-      "id": 21,
+      "id": 22,
       "type": {
         "def": {
           "composite": {
@@ -1239,7 +1309,7 @@
               },
               {
                 "name": "status",
-                "type": 22,
+                "type": 23,
                 "typeName": "CertificateStatus"
               },
               {
@@ -1259,13 +1329,13 @@
               },
               {
                 "name": "first_measurement_timestamp",
-                "type": 2,
-                "typeName": "u64"
+                "type": 14,
+                "typeName": "EmfSystemTime"
               },
               {
                 "name": "last_measurement_timestamp",
-                "type": 2,
-                "typeName": "u64"
+                "type": 14,
+                "typeName": "EmfSystemTime"
               }
             ]
           }
@@ -1278,7 +1348,7 @@
       }
     },
     {
-      "id": 22,
+      "id": 23,
       "type": {
         "def": {
           "variant": {
@@ -1302,7 +1372,7 @@
       }
     },
     {
-      "id": 23,
+      "id": 24,
       "type": {
         "def": {
           "composite": {}
@@ -1314,7 +1384,7 @@
           },
           {
             "name": "R",
-            "type": 24
+            "type": 25
           }
         ],
         "path": [
@@ -1325,7 +1395,7 @@
       }
     },
     {
-      "id": 24,
+      "id": 25,
       "type": {
         "def": {
           "composite": {}
@@ -1344,7 +1414,7 @@
       }
     },
     {
-      "id": 25,
+      "id": 26,
       "type": {
         "def": {
           "composite": {
@@ -1361,18 +1431,18 @@
               },
               {
                 "name": "min_time_between_measurements_to_save",
-                "type": 2,
-                "typeName": "<u64 as::ink::storage::traits::AutoStorableHint<::ink::storage\n::traits::ManualKey<1945874052u32, ()>,>>::Type"
+                "type": 27,
+                "typeName": "<EmfDuration as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<1945874052u32, ()>,>>::Type"
               },
               {
                 "name": "min_time_between_spikes_to_save",
-                "type": 2,
-                "typeName": "<u64 as::ink::storage::traits::AutoStorableHint<::ink::storage\n::traits::ManualKey<2026660659u32, ()>,>>::Type"
+                "type": 27,
+                "typeName": "<EmfDuration as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<2026660659u32, ()>,>>::Type"
               },
               {
                 "name": "max_time_between_spikes_to_spawn",
-                "type": 2,
-                "typeName": "<u64 as::ink::storage::traits::AutoStorableHint<::ink::storage\n::traits::ManualKey<200068610u32, ()>,>>::Type"
+                "type": 27,
+                "typeName": "<EmfDuration as::ink::storage::traits::AutoStorableHint<::ink::\nstorage::traits::ManualKey<200068610u32, ()>,>>::Type"
               },
               {
                 "name": "min_spikes_count_to_spawn",
@@ -1386,7 +1456,7 @@
               },
               {
                 "name": "sub_entities",
-                "type": 15,
+                "type": 16,
                 "typeName": "<Mapping<AccountId, SubEntity> as::ink::storage::traits::\nAutoStorableHint<::ink::storage::traits::ManualKey<750751168u32, ()\n>,>>::Type"
               },
               {
@@ -1396,7 +1466,7 @@
               },
               {
                 "name": "certificates",
-                "type": 20,
+                "type": 21,
                 "typeName": "<Mapping<CertificateIndexType, Certificate> as::ink::storage::traits\n::AutoStorableHint<::ink::storage::traits::ManualKey<\n1980704238u32, ()>,>>::Type"
               }
             ]
@@ -1410,7 +1480,27 @@
       }
     },
     {
-      "id": 26,
+      "id": 27,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "type": 2,
+                "typeName": "u64"
+              }
+            ]
+          }
+        },
+        "path": [
+          "emf_contract",
+          "emf_contract",
+          "EmfDuration"
+        ]
+      }
+    },
+    {
+      "id": 28,
       "type": {
         "def": {
           "variant": {
@@ -1427,7 +1517,7 @@
               {
                 "fields": [
                   {
-                    "type": 27
+                    "type": 29
                   }
                 ],
                 "index": 1,
@@ -1443,7 +1533,7 @@
           },
           {
             "name": "E",
-            "type": 27
+            "type": 29
           }
         ],
         "path": [
@@ -1452,7 +1542,7 @@
       }
     },
     {
-      "id": 27,
+      "id": 29,
       "type": {
         "def": {
           "variant": {
@@ -1471,7 +1561,7 @@
       }
     },
     {
-      "id": 28,
+      "id": 30,
       "type": {
         "def": {
           "variant": {
@@ -1479,7 +1569,7 @@
               {
                 "fields": [
                   {
-                    "type": 29
+                    "type": 31
                   }
                 ],
                 "index": 0,
@@ -1488,7 +1578,7 @@
               {
                 "fields": [
                   {
-                    "type": 27
+                    "type": 29
                   }
                 ],
                 "index": 1,
@@ -1500,11 +1590,11 @@
         "params": [
           {
             "name": "T",
-            "type": 29
+            "type": 31
           },
           {
             "name": "E",
-            "type": 27
+            "type": 29
           }
         ],
         "path": [
@@ -1513,7 +1603,7 @@
       }
     },
     {
-      "id": 29,
+      "id": 31,
       "type": {
         "def": {
           "variant": {
@@ -1530,7 +1620,7 @@
               {
                 "fields": [
                   {
-                    "type": 30
+                    "type": 32
                   }
                 ],
                 "index": 1,
@@ -1546,7 +1636,7 @@
           },
           {
             "name": "E",
-            "type": 30
+            "type": 32
           }
         ],
         "path": [
@@ -1555,7 +1645,7 @@
       }
     },
     {
-      "id": 30,
+      "id": 32,
       "type": {
         "def": {
           "variant": {
@@ -1611,90 +1701,6 @@
       }
     },
     {
-      "id": 31,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 32
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 27
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 32
-          },
-          {
-            "name": "E",
-            "type": 27
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
-      "id": 32,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 14
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 30
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 14
-          },
-          {
-            "name": "E",
-            "type": 30
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
       "id": 33,
       "type": {
         "def": {
@@ -1712,7 +1718,7 @@
               {
                 "fields": [
                   {
-                    "type": 27
+                    "type": 29
                   }
                 ],
                 "index": 1,
@@ -1728,7 +1734,7 @@
           },
           {
             "name": "E",
-            "type": 27
+            "type": 29
           }
         ],
         "path": [
@@ -1745,6 +1751,90 @@
               {
                 "fields": [
                   {
+                    "type": 15
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 32
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 15
+          },
+          {
+            "name": "E",
+            "type": 32
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 35,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 36
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 29
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 36
+          },
+          {
+            "name": "E",
+            "type": 29
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 36,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
                     "type": 0
                   }
                 ],
@@ -1754,7 +1844,7 @@
               {
                 "fields": [
                   {
-                    "type": 30
+                    "type": 32
                   }
                 ],
                 "index": 1,
@@ -1770,7 +1860,7 @@
           },
           {
             "name": "E",
-            "type": 30
+            "type": 32
           }
         ],
         "path": [
@@ -1779,7 +1869,7 @@
       }
     },
     {
-      "id": 35,
+      "id": 37,
       "type": {
         "def": {
           "composite": {
@@ -1799,7 +1889,7 @@
       }
     },
     {
-      "id": 36,
+      "id": 38,
       "type": {
         "def": {
           "primitive": "u32"
@@ -1807,7 +1897,7 @@
       }
     },
     {
-      "id": 37,
+      "id": 39,
       "type": {
         "def": {
           "variant": {}

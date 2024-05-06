@@ -71,7 +71,7 @@ async fn main() -> Res<()> {
     let rpc = rpc::RpcClient::from_url(rpc_url).await?;
     let rpc_legacy: LegacyRpcMethods<PolkadotConfig> = LegacyRpcMethods::new(rpc.clone());
     let contract_address: AccountId32 =
-        AccountId32::from_str("5Ccs3SPZLqiLKxpfm9TQKLUXXKiEdUMjgVdZPr8NCe4bCSkF")?;
+        AccountId32::from_str(&std::env::var("SMART_CONTRACT_ADDRESS")?)?;
     let keypair = subxt_signer::sr25519::dev::bob();
     let state = State {
         api,
@@ -121,7 +121,7 @@ async fn start_tcp_server(state: State, mut stop_r: watch::Receiver<()>) -> Res<
 
 async fn process_connection(connection: (TcpStream, SocketAddr), state: State) -> Res<()> {
     let (mut stream, addr) = connection;
-    trace!("new rcp client connected: {addr}");
+    trace!("new tcp client connected: {addr}");
 
     let mut buf: Vec<u8> = vec![0; 1024];
     let n = stream.read(&mut buf).await;
