@@ -194,7 +194,7 @@ async fn test_general_flow() {
     // we do not know how many rpc requests we need to make.
     store_measurements(&api, &tcp_server_address, 6, 6).await;
 
-    // Store measurement spikes to see too much spikes smart contract event.
+    // Store measurement spikes to see too many spikes smart contract event.
     store_measurements(&api, &tcp_server_address, 69, 2).await;
 
     // todo: remove it after waiting for exact event by channel

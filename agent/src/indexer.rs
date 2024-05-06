@@ -1,27 +1,27 @@
 use std::{
     collections::{BTreeMap, HashMap},
     fs::OpenOptions,
-    io::{Bytes, ErrorKind},
+    io::ErrorKind,
+    str::FromStr,
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-// use axum::{
-//     extract::FromRequestParts,
-//     http::{request::Parts, StatusCode},
-//     response::{IntoResponse, Response},
-//     routing::get,
-//     Extension, Json, Router,
-// };
+use axum::{
+    extract::FromRequestParts,
+    http::{request::Parts, StatusCode},
+    response::{IntoResponse, Response},
+    routing::get,
+    Extension, Json, Router,
+};
 use contract_transcode::ContractMessageTranscoder;
 use log::{debug, error, info, trace};
-// use serde::{Deserialize, Serialize};
-use sqlx::{Connection, QueryBuilder, SqliteConnection};
+use serde::{Deserialize, Serialize};
+use sqlx::{Connection, SqliteConnection};
 use subxt::{
     backend::rpc::RpcClient,
-    config::polkadot,
     events::{EventDetails, Events, StaticEvent},
-    ext::sp_core::{bytes::to_hex, hexdisplay::AsBytesRef, H256},
+    ext::sp_core::{bytes::to_hex, H256},
     rpc_params,
     utils::AccountId32,
     OnlineClient, PolkadotConfig,
@@ -61,7 +61,7 @@ impl DatabaseSaver for EntityCreated {
     }
 }
 
-#[derive(Debug, scale::Decode)]
+#[derive(scale::Decode)]
 struct SubEntityCreated {
     entity: AccountId32,
     sub_entity: AccountId32,
@@ -74,16 +74,16 @@ impl DatabaseSaver for SubEntityCreated {
             .bind(self.entity.to_string())
             .bind(self.sub_entity.to_string())
             .bind(self.location)
-            .bind(timestamp.duration_since(UNIX_EPOCH)?.as_secs() as i64)
+            .bind(timestamp.duration_since(UNIX_EPOCH)?.as_secs() as u32)
             .execute(&mut db.lock().await.conn)
             .await?;
         Ok(())
     }
 }
 
-#[derive(Debug, scale::Decode)]
+#[derive(scale::Decode)]
 struct NewSpike {
-    entity: AccountId32,
+    _entity: AccountId32,
     sub_entity: AccountId32,
     value: u128,
 }
@@ -92,23 +92,23 @@ impl DatabaseSaver for NewSpike {
     async fn save(self, db: &DatabasePointer, timestamp: SystemTime) -> Res<()> {
         sqlx::query("insert into spikes (sub_entity, value, created_at) values (?1, ?2, ?3)")
             .bind(self.sub_entity.to_string())
-            .bind(self.value as i64)
-            .bind(timestamp.duration_since(UNIX_EPOCH)?.as_secs() as i64)
+            .bind(self.value as u32)
+            .bind(timestamp.duration_since(UNIX_EPOCH)?.as_secs() as u32)
             .execute(&mut db.lock().await.conn)
             .await?;
         Ok(())
     }
 }
 
-#[derive(Debug, scale::Decode)]
-struct TooMuchSpikes {
-    entity: AccountId32,
+#[derive(scale::Decode)]
+struct TooManySpikes {
+    _entity: AccountId32,
     sub_entity: AccountId32,
 }
 
-impl DatabaseSaver for TooMuchSpikes {
+impl DatabaseSaver for TooManySpikes {
     async fn save(self, db: &DatabasePointer, timestamp: SystemTime) -> Res<()> {
-        sqlx::query("insert into too_much_spikes (sub_entity, created_at) values (?1, ?2)")
+        sqlx::query("insert into too_many_spikes (sub_entity, created_at) values (?1, ?2)")
             .bind(self.sub_entity.to_string())
             .bind(timestamp.duration_since(UNIX_EPOCH)?.as_secs() as i64)
             .execute(&mut db.lock().await.conn)
@@ -117,9 +117,9 @@ impl DatabaseSaver for TooMuchSpikes {
     }
 }
 
-#[derive(Debug, scale::Decode)]
+#[derive(scale::Decode)]
 struct CertificateReady {
-    entity: AccountId32,
+    _entity: AccountId32,
     sub_entity: AccountId32,
 }
 
@@ -142,11 +142,11 @@ pub(crate) async fn run(api: OnlineClient<PolkadotConfig>, rpc: RpcClient) -> Re
     let database = Arc::new(Mutex::new(Database::new().await?));
     let database_ = database.clone();
     tokio::spawn(async move { run_indexer(api, rpc, database_).await });
-    // tokio::spawn(async move {
-    //     if let Err(e) = run_api(database).await {
-    //         error!("failed to run api: {:?}", e)
-    //     }
-    // });
+    tokio::spawn(async move {
+        if let Err(e) = run_api(database).await {
+            error!("failed to run api: {:?}", e)
+        }
+    });
     Ok(())
 }
 
@@ -258,12 +258,12 @@ async fn process_event(
             "SubEntityCreated" => {
                 prepare_event_data::<SubEntityCreated>(data, database, timestamp).await?;
             }
+            "NewSpike" => prepare_event_data::<NewSpike>(data, database, timestamp).await?,
+            "TooManySpikes" => {
+                prepare_event_data::<TooManySpikes>(data, database, timestamp).await?
+            }
             "CertificateReady" => {
                 prepare_event_data::<CertificateReady>(data, database, timestamp).await?
-            }
-            "NewSpike" => prepare_event_data::<NewSpike>(data, database, timestamp).await?,
-            "TooMuchSpikes" => {
-                prepare_event_data::<TooMuchSpikes>(data, database, timestamp).await?
             }
             _ => return Ok(()),
         }
@@ -358,13 +358,38 @@ async fn wait_results(
     }
 }
 
-// #[derive(sqlx::FromRow)]
-// struct DatabaseDevice {
-//     address: String,
-//     version: String,
-//     data: Vec<u8>,
-//     updated_at: i64,
-// }
+#[derive(sqlx::FromRow, Serialize)]
+struct Entity {
+    account_id: String,
+    created_at: u32,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct SubEntity {
+    entity: String,
+    account_id: String,
+    location: String,
+    created_at: u32,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct Spike {
+    sub_entity: String,
+    value: String,
+    created_at: u32,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct TooManySpike {
+    sub_entity: String,
+    created_at: u32,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct ReadyCertificate {
+    sub_entity: String,
+    created_at: u32,
+}
 
 type DatabasePointer = Arc<Mutex<Database>>;
 
@@ -396,245 +421,177 @@ impl Database {
         Ok(Self { conn })
     }
 
-    // async fn query(&mut self, params: GetDevicesParams) -> Res<Vec<DatabaseDevice>> {
-    //     let mut query: QueryBuilder<sqlx::Sqlite> = Self::prepare_query::<sqlx::Sqlite>(&params)?;
-    //     trace!("sql query: {}", query.sql());
-    //     let query = query.build_query_as::<DatabaseDevice>();
-    //     let devices = query.fetch_all(&mut self.conn).await?;
-    //     Ok(devices)
-    // }
+    async fn read_entities(&mut self) -> Res<Vec<Entity>> {
+        let entities: Vec<Entity> =
+            sqlx::query_as::<_, Entity>("select * from entities").fetch_all(&mut self.conn).await?;
+        Ok(entities)
+    }
 
-    // // todo: fix it
-    // fn prepare_query<'a, DB: sqlx::Database>(
-    //     params: &'a GetDevicesParams,
-    // ) -> Res<QueryBuilder<'a, DB>>
-    // where
-    //     std::string::String: sqlx::Encode<'a, DB>,
-    //     std::string::String: sqlx::Type<DB>,
-    //     u32: sqlx::Encode<'a, DB>,
-    //     u32: sqlx::Type<DB>,
-    //     f64: sqlx::Encode<'a, DB>,
-    //     f64: sqlx::Type<DB>,
-    // {
-    //     let mut query: QueryBuilder<DB> = QueryBuilder::new("select * from devices");
-    //     if let Some(address) = &params.address {
-    //         query.push(" where address = ");
-    //         query.push_bind(address);
-    //         return Ok(query);
-    //     }
-    //     let filters_len = params.filters.len();
-    //     if filters_len != 0 {
-    //         query.push(" where ");
-    //         for (i, filter) in params.filters.iter().enumerate() {
-    //             Self::is_filter_allowed(filter)?;
-    //             if i != 0 {
-    //                 query.push(" AND ");
-    //             }
-    //             query.push(format!(
-    //                 "json_extract(data, '$.{}') {} ",
-    //                 filter.field, filter.condition
-    //             ));
-    //             push_bind(&mut query, &filter.value);
-    //         }
-    //     }
-    //     query.push(" order by updated_at desc");
-    //     query.push(" limit ").push_bind(params.limit).push(" offset ").push_bind(params.offset);
-    //     Ok(query)
-    // }
+    async fn read_sub_entities(&mut self, entity: AccountId32) -> Res<Vec<SubEntity>> {
+        let sub_entities: Vec<SubEntity> =
+            sqlx::query_as::<_, SubEntity>("select * from sub_entities where account_id = ?1")
+                .bind(entity.to_string())
+                .fetch_all(&mut self.conn)
+                .await?;
+        Ok(sub_entities)
+    }
 
-    // // I didn't find a way to properly bind JSON field name and condition to sql query,
-    // // so it is required to manually check for allowed fields and conditions.
-    // // For value we don't need this check as we can bind it.
-    // fn is_filter_allowed(filter: &Filter) -> Res<()> {
-    //     Self::is_field_allowed(&filter.field)?;
-    //     Self::is_condition_allowed(&filter.condition)?;
-    //     Ok(())
-    // }
+    async fn read_spikes(&mut self, sub_entity: AccountId32) -> Res<Vec<Spike>> {
+        let spikes: Vec<Spike> =
+            sqlx::query_as::<_, Spike>("select * from spikes where sub_entity = ?1")
+                .bind(sub_entity.to_string())
+                .fetch_all(&mut self.conn)
+                .await?;
+        Ok(spikes)
+    }
 
-    // // todo: fix it
-    // fn is_field_allowed(field: &str) -> Res<()> {
-    //     if matches!(field, "data_type" | "location" | "price_access" | "price_pin") {
-    //         return Ok(());
-    //     }
-    //     Err("received untrusted filter".into())
-    // }
+    async fn read_too_many_spikes(&mut self, sub_entity: AccountId32) -> Res<Vec<TooManySpike>> {
+        let too_many_spikes: Vec<TooManySpike> = sqlx::query_as::<_, TooManySpike>(
+            "select * from too_many_spikes where sub_entity = ?1",
+        )
+        .bind(sub_entity.to_string())
+        .fetch_all(&mut self.conn)
+        .await?;
+        Ok(too_many_spikes)
+    }
 
-    // fn is_condition_allowed(field: &str) -> Res<()> {
-    //     if matches!(field, "=" | "<" | ">") {
-    //         return Ok(());
-    //     }
-    //     Err("received untrusted condition".into())
-    // }
+    async fn read_ready_certificates(
+        &mut self,
+        sub_entity: AccountId32,
+    ) -> Res<Vec<ReadyCertificate>> {
+        let ready_certificates: Vec<ReadyCertificate> = sqlx::query_as::<_, ReadyCertificate>(
+            "select * from ready_certificates where sub_entity = ?1",
+        )
+        .bind(sub_entity.to_string())
+        .fetch_all(&mut self.conn)
+        .await?;
+        Ok(ready_certificates)
+    }
 }
 
-// fn push_bind<'a, DB: sqlx::Database>(query: &mut QueryBuilder<'a, DB>, value: &'a Value)
-// where
-//     std::string::String: sqlx::Encode<'a, DB>,
-//     std::string::String: sqlx::Type<DB>,
-//     f64: sqlx::Encode<'a, DB>,
-//     f64: sqlx::Type<DB>,
-// {
-//     match value {
-//         Value::String(string) => query.push_bind(string),
-//         Value::F64(f64) => query.push_bind(f64),
-//     };
-// }
+struct ErrorResponse {
+    status_code: StatusCode,
+    message: String,
+}
 
-// struct ErrorResponse {
-//     status_code: StatusCode,
-//     message: String,
-// }
+impl From<Error> for ErrorResponse {
+    fn from(value: Error) -> Self {
+        Self {
+            status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            message: value.0,
+        }
+    }
+}
 
-// impl<T: ToString> From<T> for ErrorResponse {
-//     fn from(value: T) -> Self {
-//         Self {
-//             status_code: StatusCode::INTERNAL_SERVER_ERROR,
-//             message: value.to_string(),
-//         }
-//     }
-// }
+impl<T: ToString> From<T> for ErrorResponse {
+    fn from(value: T) -> Self {
+        Self {
+            status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            message: value.to_string(),
+        }
+    }
+}
 
-// impl IntoResponse for ErrorResponse {
-//     fn into_response(self) -> Response {
-//         if self.status_code == StatusCode::INTERNAL_SERVER_ERROR {
-//             error!("internal server error: {}", self.message);
-//         }
-//         if self.message.is_empty() {
-//             self.status_code.into_response()
-//         } else {
-//             (self.status_code, self.message).into_response()
-//         }
-//     }
-// }
+impl IntoResponse for ErrorResponse {
+    fn into_response(self) -> Response {
+        if self.status_code == StatusCode::INTERNAL_SERVER_ERROR {
+            error!("internal server error: {}", self.message);
+        }
+        if self.message.is_empty() {
+            self.status_code.into_response()
+        } else {
+            (self.status_code, self.message).into_response()
+        }
+    }
+}
 
-// async fn run_api(database: DatabasePointer) -> Res<()> {
-//     let app = Router::new()
-//         // .route("/devices", get(get_devices))
-//         .layer(Extension(database))
-//         .fallback(fallback);
-//     let addr = "127.0.0.1:9494";
-//     let listener = tokio::net::TcpListener::bind(&addr).await?;
-//     info!("listen on {addr} for HTTP requests");
-//     axum::serve(listener, app).await?;
-//     Ok(())
-// }
+struct QueryArray<T>(T);
 
-// struct QueryArray<T>(pub T);
+#[axum::async_trait]
+impl<S, T> FromRequestParts<S> for QueryArray<T>
+where
+    S: Send + Sync,
+    T: serde::de::DeserializeOwned + Default,
+{
+    type Rejection = ErrorResponse;
 
-// #[axum::async_trait]
-// impl<S, T> FromRequestParts<S> for QueryArray<T>
-// where
-//     S: Send + Sync,
-//     T: serde::de::DeserializeOwned + Default,
-// {
-//     type Rejection = ErrorResponse;
+    async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Self, Self::Rejection> {
+        let query = match parts.uri.query() {
+            Some(query) => query,
+            None => return Ok(Self(T::default())),
+        };
+        let data = match serde_qs::from_str::<T>(query) {
+            Ok(data) => data,
+            Err(e) => return Err(format!("failed to decode query params: {e}").into()),
+        };
+        Ok(Self(data))
+    }
+}
 
-//     async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Self, Self::Rejection> {
-//         let query = match parts.uri.query() {
-//             Some(query) => query,
-//             None => return Ok(Self(T::default())),
-//         };
-//         let data = match serde_qs::from_str::<T>(query) {
-//             Ok(data) => data,
-//             Err(e) => return Err(format!("failed to decode query params: {e}").into()),
-//         };
-//         Ok(Self(data))
-//     }
-// }
+async fn run_api(database: DatabasePointer) -> Res<()> {
+    let app = Router::new()
+        .route("/entities", get(get_entities))
+        .route("/sub-entities", get(get_sub_entities))
+        .route("/spikes", get(get_spikes))
+        .route("/too-many-spikes", get(get_too_many_spikes))
+        .route("/ready-certificates", get(get_ready_certificates))
+        .layer(Extension(database))
+        .fallback(fallback);
+    let addr = "127.0.0.1:9494";
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    info!("listen on {addr} for HTTP requests");
+    axum::serve(listener, app).await?;
+    Ok(())
+}
 
-// // // todo: fix it
-// // #[derive(Deserialize)]
-// // struct GetDevicesParams {
-// //     address: Option<String>,
-// //     #[serde(default)]
-// //     filters: Vec<Filter>,
-// //     #[serde(default)]
-// //     limit: u32,
-// //     #[serde(default)]
-// //     offset: u32,
-// // }
+#[derive(Deserialize, Default)]
+struct QueryParams {
+    account_id: String,
+}
 
-// // impl Default for GetDevicesParams {
-// //     fn default() -> Self {
-// //         Self {
-// //             address: None,
-// //             filters: vec![],
-// //             limit: 10,
-// //             offset: 0,
-// //         }
-// //     }
-// // }
+async fn get_entities(
+    Extension(database): Extension<DatabasePointer>,
+) -> Result<impl IntoResponse, ErrorResponse> {
+    let entities = database.lock().await.read_entities().await?;
+    Ok((StatusCode::OK, Json(entities)))
+}
 
-// #[derive(Deserialize)]
-// struct Filter {
-//     field: String,
-//     condition: String, // "=", "<", ">"
-//     value: Value,
-// }
+async fn get_sub_entities(
+    Extension(database): Extension<DatabasePointer>,
+    QueryArray(params): QueryArray<QueryParams>,
+) -> Result<impl IntoResponse, ErrorResponse> {
+    let entity: AccountId32 = AccountId32::from_str(&params.account_id)?;
+    let sub_entities = database.lock().await.read_sub_entities(entity).await?;
+    Ok((StatusCode::OK, Json(sub_entities)))
+}
 
-// enum Value {
-//     String(String),
-//     F64(f64),
-// }
+async fn get_spikes(
+    Extension(database): Extension<DatabasePointer>,
+    QueryArray(params): QueryArray<QueryParams>,
+) -> Result<impl IntoResponse, ErrorResponse> {
+    let sub_entity: AccountId32 = AccountId32::from_str(&params.account_id)?;
+    let spikes = database.lock().await.read_spikes(sub_entity).await?;
+    Ok((StatusCode::OK, Json(spikes)))
+}
 
-// impl<'de> Deserialize<'de> for Value {
-//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-//     where
-//         D: serde::Deserializer<'de>,
-//     {
-//         let value = String::deserialize(deserializer)?;
-//         match value.parse::<f64>() {
-//             Ok(v) => Ok(Value::F64(v)),
-//             _ => Ok(Value::String(value)),
-//         }
-//     }
-// }
+async fn get_too_many_spikes(
+    Extension(database): Extension<DatabasePointer>,
+    QueryArray(params): QueryArray<QueryParams>,
+) -> Result<impl IntoResponse, ErrorResponse> {
+    let sub_entity: AccountId32 = AccountId32::from_str(&params.account_id)?;
+    let too_many_spikes = database.lock().await.read_too_many_spikes(sub_entity).await?;
+    Ok((StatusCode::OK, Json(too_many_spikes)))
+}
 
-// // #[derive(Serialize, Deserialize)]
-// // struct DeviceResponse {
-// //     address: String,
-// //     version: String,
-// //     device: serde_json::Value,
-// //     updated_at: u64,
-// // }
+async fn get_ready_certificates(
+    Extension(database): Extension<DatabasePointer>,
+    QueryArray(params): QueryArray<QueryParams>,
+) -> Result<impl IntoResponse, ErrorResponse> {
+    let sub_entity: AccountId32 = AccountId32::from_str(&params.account_id)?;
+    let ready_certificates = database.lock().await.read_ready_certificates(sub_entity).await?;
+    Ok((StatusCode::OK, Json(ready_certificates)))
+}
 
-// // async fn get_devices(
-// //     Extension(database): Extension<DatabasePointer>,
-// //     QueryArray(params): QueryArray<GetDevicesParams>,
-// // ) -> Result<impl IntoResponse, ErrorResponse> {
-// //     for filter in &params.filters {
-// //         if Database::is_filter_allowed(filter).is_err() {
-// //             return Err(format!("{} field is not supporting for filtering", filter.field).into());
-// //         }
-// //     }
-// //     let internal_devices = database.lock().await.query(params).await?;
-// //     let mut external_devices: Vec<DeviceResponse> = Vec::with_capacity(internal_devices.len());
-// //     for internal_device in &internal_devices {
-// //         let device: serde_json::Value = {
-// //             match internal_device.version.as_str() {
-// //                 V1 => {
-// //                     let device: serde_json::Value = serde_json::from_slice(&internal_device.data)?;
-// //                     device
-// //                 }
-// //                 _ => {
-// //                     return Err(format!(
-// //                         "unknown version to convert internal device to external :{}",
-// //                         internal_device.version
-// //                     )
-// //                     .into())
-// //                 }
-// //             }
-// //         };
-// //         external_devices.push(DeviceResponse {
-// //             address: internal_device.address.clone(),
-// //             version: internal_device.version.clone(),
-// //             device,
-// //             updated_at: internal_device.updated_at as u64,
-// //         })
-// //     }
-// //     Ok((StatusCode::OK, Json(external_devices)))
-// // }
-
-// async fn fallback() -> impl IntoResponse {
-//     StatusCode::NOT_FOUND
-// }
+async fn fallback() -> impl IntoResponse {
+    StatusCode::NOT_FOUND
+}

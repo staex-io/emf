@@ -19,9 +19,9 @@ mod emf_contract {
     // we think that spike is new and we can save it as
     // something new.
     // 6 minutes.
-    const TOO_MUCH_SPIKES_TIME_DIFF: Duration = Duration::from_secs(360);
-    // Actually it means we need 10 spikes to spawn too much spikes event.
-    const TOO_MUCH_SPIKES_COUNT: u8 = 10;
+    const TOO_MANY_SPIKES_TIME_DIFF: Duration = Duration::from_secs(360);
+    // Actually it means we need 10 spikes to spawn too many spikes event.
+    const TOO_MANY_SPIKES_COUNT: u8 = 10;
 
     // We store duration as seconds.
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
@@ -128,7 +128,7 @@ mod emf_contract {
     }
 
     #[ink(event)]
-    pub struct TooMuchSpikes {
+    pub struct TooManySpikes {
         #[ink(topic)]
         pub entity: AccountId,
         #[ink(topic)]
@@ -267,7 +267,7 @@ mod emf_contract {
         min_time_between_measurements_to_save: EmfDuration,
         min_time_between_spikes_to_save: EmfDuration,
         // If nearest spikes time difference more that such time
-        // we don't need to spawn too much spikes event.
+        // we don't need to spawn too many spikes event.
         max_time_between_spikes_to_spawn: EmfDuration,
         min_spikes_count_to_spawn: u8,
 
@@ -285,8 +285,8 @@ mod emf_contract {
                 DAYS_IN_MONTH,
                 H23.into(),
                 ONE_MINUTE.into(),
-                TOO_MUCH_SPIKES_TIME_DIFF.into(),
-                TOO_MUCH_SPIKES_COUNT,
+                TOO_MANY_SPIKES_TIME_DIFF.into(),
+                TOO_MANY_SPIKES_COUNT,
             )
         }
     }
@@ -420,9 +420,9 @@ mod emf_contract {
                 self.min_time_between_spikes_to_save,
             )?;
 
-            let too_much_spikes = if spikes.0.len() >= self.min_spikes_count_to_spawn as usize {
+            let is_too_many_spikes = if spikes.0.len() >= self.min_spikes_count_to_spawn as usize {
                 // It means in last 10 spikes we have at least one diff between two
-                // nearest spikes which is more than TOO_MUCH_SPIKES_TIME_DIFF.
+                // nearest spikes which is more than TOO_MANY_SPIKES_TIME_DIFF.
                 let mut interval_broken = false;
                 #[allow(clippy::arithmetic_side_effects)]
                 for i in (spikes.0.len() - self.min_spikes_count_to_spawn as usize + 1
@@ -456,7 +456,7 @@ mod emf_contract {
                 }
                 !interval_broken
             } else {
-                ink_env::debug_println!("not enough spikes to calculate too much spikes data");
+                ink_env::debug_println!("not enough spikes to calculate too many spikes data");
                 false
             };
 
@@ -476,9 +476,9 @@ mod emf_contract {
                 sub_entity: self.env().caller(),
                 value,
             });
-            if too_much_spikes {
-                ink_env::debug_println!("too much spikes event was emitted");
-                self.env().emit_event(TooMuchSpikes {
+            if is_too_many_spikes {
+                ink_env::debug_println!("too many spikes event was emitted");
+                self.env().emit_event(TooManySpikes {
                     entity: sub_entity_record.entity,
                     sub_entity: self.env().caller(),
                 });
@@ -755,32 +755,32 @@ mod emf_contract {
             // And event about spike.
             assert_eq!(3, emitted_events.len());
 
-            timestamp += TOO_MUCH_SPIKES_TIME_DIFF.as_millis();
+            timestamp += TOO_MANY_SPIKES_TIME_DIFF.as_millis();
             set_timestamp(timestamp);
             emf_contract.store_measurement_spike(111).unwrap();
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
             // One more event for measurement spike.
             assert_eq!(3 + 1, emitted_events.len());
 
-            // We need more 8 spikes in a row to spawn too much spikes event.
+            // We need more 8 spikes in a row to spawn too many spikes event.
             for _ in 0..8 {
-                timestamp += TOO_MUCH_SPIKES_TIME_DIFF.as_millis();
+                timestamp += TOO_MANY_SPIKES_TIME_DIFF.as_millis();
                 set_timestamp(timestamp);
                 emf_contract.store_measurement_spike(111).unwrap();
             }
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
-            // +8 spikes events and +1 too much spike event.
+            // +8 spikes events and +1 too many spike event.
             assert_eq!(4 + 8 + 1, emitted_events.len());
 
             // If there are more than 6m passed from last spike
-            // we don't have too much spikes event.
-            timestamp += (TOO_MUCH_SPIKES_TIME_DIFF + TOO_MUCH_SPIKES_TIME_DIFF).as_millis() + 1;
+            // we don't have too many spikes event.
+            timestamp += (TOO_MANY_SPIKES_TIME_DIFF + TOO_MANY_SPIKES_TIME_DIFF).as_millis() + 1;
             set_timestamp(timestamp);
             emf_contract.store_measurement_spike(111).unwrap();
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
             assert_eq!(13 + 1, emitted_events.len());
 
-            // Test that we cannot store too much same events on-chain.
+            // Test that we cannot store too many same events on-chain.
             timestamp += ONE_MINUTE.as_millis() - 1;
             set_timestamp(timestamp);
             let err = emf_contract.store_measurement_spike(111).unwrap_err();
@@ -804,7 +804,7 @@ mod emf_contract {
             // Test that we can store up to 10 spikes but in the middle
             // diff in time between some spikes are more than allowed.
             for _ in 0..8 {
-                timestamp += TOO_MUCH_SPIKES_TIME_DIFF.as_millis();
+                timestamp += TOO_MANY_SPIKES_TIME_DIFF.as_millis();
                 set_timestamp(timestamp);
                 emf_contract.store_measurement_spike(111).unwrap();
             }
@@ -812,17 +812,17 @@ mod emf_contract {
             assert_eq!(14 + 8, emitted_events.len());
 
             // Save spike with time than max allowed.
-            timestamp += (TOO_MUCH_SPIKES_TIME_DIFF + TOO_MUCH_SPIKES_TIME_DIFF).as_millis() + 1;
+            timestamp += (TOO_MANY_SPIKES_TIME_DIFF + TOO_MANY_SPIKES_TIME_DIFF).as_millis() + 1;
             set_timestamp(timestamp);
             emf_contract.store_measurement_spike(111).unwrap();
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
             assert_eq!(22 + 1, emitted_events.len());
 
-            timestamp += TOO_MUCH_SPIKES_TIME_DIFF.as_millis();
+            timestamp += TOO_MANY_SPIKES_TIME_DIFF.as_millis();
             set_timestamp(timestamp);
             emf_contract.store_measurement_spike(111).unwrap();
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
-            // So we do not have too much spikes event.
+            // So we do not have too many spikes event.
             assert_eq!(23 + 1, emitted_events.len());
         }
 

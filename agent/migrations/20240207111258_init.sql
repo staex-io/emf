@@ -13,7 +13,7 @@ create table spikes (
   created_at integer
 );
 
-create table too_much_spikes (
+create table too_many_spikes (
   sub_entity text not null references sub_entities (account_id),
   created_at integer
 );
