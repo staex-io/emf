@@ -6,20 +6,20 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use axum::{
-    extract::FromRequestParts,
-    http::{request::Parts, StatusCode},
-    response::{IntoResponse, Response},
-    routing::get,
-    Extension, Json, Router,
-};
-use contract_transcode::{ContractMessageTranscoder, Transcoder};
+// use axum::{
+//     extract::FromRequestParts,
+//     http::{request::Parts, StatusCode},
+//     response::{IntoResponse, Response},
+//     routing::get,
+//     Extension, Json, Router,
+// };
+use contract_transcode::ContractMessageTranscoder;
 use log::{debug, error, info, trace};
-use scale::Decode;
-use serde::{Deserialize, Serialize};
+// use serde::{Deserialize, Serialize};
 use sqlx::{Connection, QueryBuilder, SqliteConnection};
 use subxt::{
     backend::rpc::RpcClient,
+    config::polkadot,
     events::{EventDetails, Events, StaticEvent},
     ext::sp_core::{bytes::to_hex, hexdisplay::AsBytesRef, H256},
     rpc_params,
@@ -31,7 +31,6 @@ use tokio::{
     time::sleep,
 };
 
-use crate::{emf_contract::api::runtime_types::contracts_node_runtime::RuntimeEvent, Res};
 use crate::{
     emf_contract::api::{
         contracts::events::ContractEmitted,
@@ -39,49 +38,115 @@ use crate::{
     },
     Error,
 };
+use crate::{
+    emf_contract::{self, api::runtime_types::contracts_node_runtime::RuntimeEvent},
+    Res,
+};
 
-type Task = (u64, Res<Option<Events<PolkadotConfig>>>);
+type Task = (u64, Res<(SystemTime, Option<Events<PolkadotConfig>>)>);
 
-#[derive(Debug, Decode)]
+#[derive(Debug, scale::Decode)]
 struct EntityCreated {
     entity: AccountId32,
 }
 
-#[derive(Debug, Decode)]
+impl DatabaseSaver for EntityCreated {
+    async fn save(self, db: &DatabasePointer, timestamp: SystemTime) -> Res<()> {
+        sqlx::query("insert into entities (account_id, created_at) values (?1, ?2)")
+            .bind(self.entity.to_string())
+            .bind(timestamp.duration_since(UNIX_EPOCH)?.as_secs() as i64)
+            .execute(&mut db.lock().await.conn)
+            .await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, scale::Decode)]
 struct SubEntityCreated {
     entity: AccountId32,
     sub_entity: AccountId32,
     location: String,
 }
 
-#[derive(Debug, Decode)]
+impl DatabaseSaver for SubEntityCreated {
+    async fn save(self, db: &DatabasePointer, timestamp: SystemTime) -> Res<()> {
+        sqlx::query("insert into sub_entities (entity, account_id, location, created_at) values (?1, ?2, ?3, ?4)")
+            .bind(self.entity.to_string())
+            .bind(self.sub_entity.to_string())
+            .bind(self.location)
+            .bind(timestamp.duration_since(UNIX_EPOCH)?.as_secs() as i64)
+            .execute(&mut db.lock().await.conn)
+            .await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, scale::Decode)]
 struct NewSpike {
     entity: AccountId32,
     sub_entity: AccountId32,
     value: u128,
 }
 
-#[derive(Debug, Decode)]
+impl DatabaseSaver for NewSpike {
+    async fn save(self, db: &DatabasePointer, timestamp: SystemTime) -> Res<()> {
+        sqlx::query("insert into spikes (sub_entity, value, created_at) values (?1, ?2, ?3)")
+            .bind(self.sub_entity.to_string())
+            .bind(self.value as i64)
+            .bind(timestamp.duration_since(UNIX_EPOCH)?.as_secs() as i64)
+            .execute(&mut db.lock().await.conn)
+            .await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, scale::Decode)]
 struct TooMuchSpikes {
     entity: AccountId32,
     sub_entity: AccountId32,
 }
 
-#[derive(Debug, Decode)]
+impl DatabaseSaver for TooMuchSpikes {
+    async fn save(self, db: &DatabasePointer, timestamp: SystemTime) -> Res<()> {
+        sqlx::query("insert into too_much_spikes (sub_entity, created_at) values (?1, ?2)")
+            .bind(self.sub_entity.to_string())
+            .bind(timestamp.duration_since(UNIX_EPOCH)?.as_secs() as i64)
+            .execute(&mut db.lock().await.conn)
+            .await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, scale::Decode)]
 struct CertificateReady {
     entity: AccountId32,
     sub_entity: AccountId32,
+}
+
+impl DatabaseSaver for CertificateReady {
+    async fn save(self, db: &DatabasePointer, timestamp: SystemTime) -> Res<()> {
+        sqlx::query("insert into ready_certificates (sub_entity, created_at) values (?1, ?2)")
+            .bind(self.sub_entity.to_string())
+            .bind(timestamp.duration_since(UNIX_EPOCH)?.as_secs() as i64)
+            .execute(&mut db.lock().await.conn)
+            .await?;
+        Ok(())
+    }
+}
+
+trait DatabaseSaver {
+    async fn save(self, db: &DatabasePointer, timestamp: SystemTime) -> Res<()>;
 }
 
 pub(crate) async fn run(api: OnlineClient<PolkadotConfig>, rpc: RpcClient) -> Res<()> {
     let database = Arc::new(Mutex::new(Database::new().await?));
     let database_ = database.clone();
     tokio::spawn(async move { run_indexer(api, rpc, database_).await });
-    tokio::spawn(async move {
-        if let Err(e) = run_api(database).await {
-            error!("failed to run api: {:?}", e)
-        }
-    });
+    // tokio::spawn(async move {
+    //     if let Err(e) = run_api(database).await {
+    //         error!("failed to run api: {:?}", e)
+    //     }
+    // });
     Ok(())
 }
 
@@ -100,7 +165,7 @@ async fn run_indexer(api: OnlineClient<PolkadotConfig>, rpc: RpcClient, database
         let saved_current_block_index = current_block_index;
         let saved_workers = workers;
         debug!("current block to sync is {current_block_index}; workers = {workers}");
-        match process(&mut current_block_index, workers, &api, &rpc, &topics).await {
+        match process(&mut current_block_index, workers, &api, &rpc, &topics, &database).await {
             Ok(no_more_events) => {
                 if no_more_events {
                     current_block_index = saved_current_block_index;
@@ -130,7 +195,7 @@ fn init_topics() -> Res<HashMap<String, String>> {
         let topic = to_hex(
             event_meta
                 .signature_topic()
-                .ok_or::<Error>("failed to find topic signature".to_string().into())?
+                .ok_or::<Error>("failed to find topic signature".into())?
                 .as_bytes(),
             false,
         );
@@ -145,6 +210,7 @@ async fn process(
     api: &OnlineClient<PolkadotConfig>,
     rpc: &RpcClient,
     topics: &HashMap<String, String>,
+    database: &DatabasePointer,
 ) -> Res<bool> {
     let (res_s, res_r) = mpsc::channel::<Task>(1);
 
@@ -152,7 +218,8 @@ async fn process(
     let results = wait_results(workers, res_r).await?;
 
     for res in results {
-        let events = match res.1 {
+        let (timestamp, res) = res.1;
+        let events = match res {
             Some(events) => events,
             // It means there are no events in the block.
             // Usually it means there is no block with such index
@@ -160,7 +227,7 @@ async fn process(
             None => return Ok(true),
         };
         for event in events.iter().flatten() {
-            process_event(event, topics).await?;
+            process_event(event, timestamp, topics, database).await?;
         }
     }
 
@@ -169,37 +236,34 @@ async fn process(
 
 async fn process_event(
     event: EventDetails<PolkadotConfig>,
+    timestamp: SystemTime,
     topics: &HashMap<String, String>,
+    database: &DatabasePointer,
 ) -> Res<()> {
     if event.variant_name() != ContractEmitted::EVENT {
         return Ok(());
     }
     // Usually first topic is our actual smart contract (EMF) event.
     let topic = event.topics()[0];
-    let event = event.as_root_event::<RuntimeEvent>().unwrap(); // todo: delete unwrap
-    if let RuntimeEvent::Contracts(ContractsEvent::ContractEmitted { mut data, .. }) = event {
-        let topic_name = topics.get(&to_hex(&topic.0, false)).unwrap().as_str(); // todo: delete unwrap
-        eprintln!("NEW EVENT: {}", topic_name);
+    let event = event.as_root_event::<RuntimeEvent>()?;
+    if let RuntimeEvent::Contracts(ContractsEvent::ContractEmitted { data, .. }) = event {
+        let topic_name = topics
+            .get(&to_hex(&topic.0, false))
+            .ok_or::<Error>("failed to find topic".into())?
+            .as_str();
         match topic_name {
             "EntityCreated" => {
-                let data = decode_event_data::<EntityCreated>(data);
-                eprintln!("{:?}", data)
+                prepare_event_data::<EntityCreated>(data, database, timestamp).await?;
             }
             "SubEntityCreated" => {
-                let data = decode_event_data::<SubEntityCreated>(data);
-                eprintln!("{:?}", data)
+                prepare_event_data::<SubEntityCreated>(data, database, timestamp).await?;
             }
             "CertificateReady" => {
-                let data = decode_event_data::<CertificateReady>(data);
-                eprintln!("{:?}", data)
+                prepare_event_data::<CertificateReady>(data, database, timestamp).await?
             }
-            "NewSpike" => {
-                let data = decode_event_data::<NewSpike>(data);
-                eprintln!("{:?}", data)
-            }
+            "NewSpike" => prepare_event_data::<NewSpike>(data, database, timestamp).await?,
             "TooMuchSpikes" => {
-                let data = decode_event_data::<TooMuchSpikes>(data);
-                eprintln!("{:?}", data)
+                prepare_event_data::<TooMuchSpikes>(data, database, timestamp).await?
             }
             _ => return Ok(()),
         }
@@ -207,11 +271,17 @@ async fn process_event(
     Ok(())
 }
 
-fn decode_event_data<T>(data: Vec<u8>) -> Res<T>
+async fn prepare_event_data<T>(
+    data: Vec<u8>,
+    database: &DatabasePointer,
+    timestamp: SystemTime,
+) -> Res<()>
 where
-    T: scale::Decode,
+    T: scale::Decode + DatabaseSaver,
 {
-    Ok(scale::decode_from_bytes(data.into())?)
+    let data: T = scale::decode_from_bytes(data.into())?;
+    data.save(database, timestamp).await?;
+    Ok(())
 }
 
 fn start_workers(
@@ -240,24 +310,35 @@ async fn get_events(
     block_index: u64,
     api: &OnlineClient<PolkadotConfig>,
     rpc: &RpcClient,
-) -> Res<Option<Events<PolkadotConfig>>> {
+) -> Res<(SystemTime, Option<Events<PolkadotConfig>>)> {
     trace!("get events in {} block", block_index);
     let res: Result<H256, subxt::Error> =
         rpc.request("chain_getBlockHash", rpc_params![block_index]).await;
     let hash = match res {
         Ok(hash) => hash,
-        Err(subxt::Error::Serialization(_)) => return Ok(None),
+        Err(subxt::Error::Serialization(_)) => return Ok((SystemTime::UNIX_EPOCH, None)),
         Err(e) => return Err(e.into()),
     };
-    let events = api.blocks().at(hash).await?.events().await?;
-    Ok(Some(events))
+    let block = api.blocks().at(hash).await?;
+
+    let timestamp = block
+        .extrinsics()
+        .await?
+        .find_first::<emf_contract::api::timestamp::calls::types::Set>()?
+        .ok_or::<Error>("".into())?
+        .value
+        .now;
+    let timestamp = UNIX_EPOCH + Duration::from_secs(timestamp);
+
+    let events = block.events().await?;
+    Ok((timestamp, Some(events)))
 }
 
 async fn wait_results(
     workers: usize,
     mut res_r: mpsc::Receiver<Task>,
-) -> Res<BTreeMap<u64, Option<Events<PolkadotConfig>>>> {
-    let mut results: BTreeMap<u64, Option<Events<PolkadotConfig>>> = BTreeMap::new();
+) -> Res<BTreeMap<u64, (SystemTime, Option<Events<PolkadotConfig>>)>> {
+    let mut results: BTreeMap<u64, (SystemTime, Option<Events<PolkadotConfig>>)> = BTreeMap::new();
     let mut last_err: Option<Error> = None;
     for _ in 0..workers {
         let (block, res) = match res_r.recv().await {
@@ -266,7 +347,7 @@ async fn wait_results(
         };
         match res {
             Ok(res) => {
-                results.insert(block, res);
+                results.insert(block, (res.0, res.1));
             }
             Err(e) => last_err = Some(e),
         }
@@ -277,13 +358,13 @@ async fn wait_results(
     }
 }
 
-#[derive(sqlx::FromRow)]
-struct DatabaseDevice {
-    address: String,
-    version: String,
-    data: Vec<u8>,
-    updated_at: i64,
-}
+// #[derive(sqlx::FromRow)]
+// struct DatabaseDevice {
+//     address: String,
+//     version: String,
+//     data: Vec<u8>,
+//     updated_at: i64,
+// }
 
 type DatabasePointer = Arc<Mutex<Database>>;
 
@@ -314,16 +395,6 @@ impl Database {
 
         Ok(Self { conn })
     }
-
-    // async fn save(&mut self) -> Res<()> {
-    //     sqlx::query(
-    //         r#"
-    //         "#,
-    //     )
-    //     .execute(&mut self.conn)
-    //     .await?;
-    //     Ok(())
-    // }
 
     // async fn query(&mut self, params: GetDevicesParams) -> Res<Vec<DatabaseDevice>> {
     //     let mut query: QueryBuilder<sqlx::Sqlite> = Self::prepare_query::<sqlx::Sqlite>(&params)?;
@@ -371,199 +442,199 @@ impl Database {
     //     Ok(query)
     // }
 
-    // I didn't find a way to properly bind JSON field name and condition to sql query,
-    // so it is required to manually check for allowed fields and conditions.
-    // For value we don't need this check as we can bind it.
-    fn is_filter_allowed(filter: &Filter) -> Res<()> {
-        Self::is_field_allowed(&filter.field)?;
-        Self::is_condition_allowed(&filter.condition)?;
-        Ok(())
-    }
+    // // I didn't find a way to properly bind JSON field name and condition to sql query,
+    // // so it is required to manually check for allowed fields and conditions.
+    // // For value we don't need this check as we can bind it.
+    // fn is_filter_allowed(filter: &Filter) -> Res<()> {
+    //     Self::is_field_allowed(&filter.field)?;
+    //     Self::is_condition_allowed(&filter.condition)?;
+    //     Ok(())
+    // }
 
-    // todo: fix it
-    fn is_field_allowed(field: &str) -> Res<()> {
-        if matches!(field, "data_type" | "location" | "price_access" | "price_pin") {
-            return Ok(());
-        }
-        Err("received untrusted filter".into())
-    }
+    // // todo: fix it
+    // fn is_field_allowed(field: &str) -> Res<()> {
+    //     if matches!(field, "data_type" | "location" | "price_access" | "price_pin") {
+    //         return Ok(());
+    //     }
+    //     Err("received untrusted filter".into())
+    // }
 
-    fn is_condition_allowed(field: &str) -> Res<()> {
-        if matches!(field, "=" | "<" | ">") {
-            return Ok(());
-        }
-        Err("received untrusted condition".into())
-    }
+    // fn is_condition_allowed(field: &str) -> Res<()> {
+    //     if matches!(field, "=" | "<" | ">") {
+    //         return Ok(());
+    //     }
+    //     Err("received untrusted condition".into())
+    // }
 }
 
-fn push_bind<'a, DB: sqlx::Database>(query: &mut QueryBuilder<'a, DB>, value: &'a Value)
-where
-    std::string::String: sqlx::Encode<'a, DB>,
-    std::string::String: sqlx::Type<DB>,
-    f64: sqlx::Encode<'a, DB>,
-    f64: sqlx::Type<DB>,
-{
-    match value {
-        Value::String(string) => query.push_bind(string),
-        Value::F64(f64) => query.push_bind(f64),
-    };
-}
-
-struct ErrorResponse {
-    status_code: StatusCode,
-    message: String,
-}
-
-impl<T: ToString> From<T> for ErrorResponse {
-    fn from(value: T) -> Self {
-        Self {
-            status_code: StatusCode::INTERNAL_SERVER_ERROR,
-            message: value.to_string(),
-        }
-    }
-}
-
-impl IntoResponse for ErrorResponse {
-    fn into_response(self) -> Response {
-        if self.status_code == StatusCode::INTERNAL_SERVER_ERROR {
-            error!("internal server error: {}", self.message);
-        }
-        if self.message.is_empty() {
-            self.status_code.into_response()
-        } else {
-            (self.status_code, self.message).into_response()
-        }
-    }
-}
-
-async fn run_api(database: DatabasePointer) -> Res<()> {
-    let app = Router::new()
-        // .route("/devices", get(get_devices))
-        .layer(Extension(database))
-        .fallback(fallback);
-    let addr = "127.0.0.1:9494";
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
-    info!("listen on {addr} for HTTP requests");
-    axum::serve(listener, app).await?;
-    Ok(())
-}
-
-struct QueryArray<T>(pub T);
-
-#[axum::async_trait]
-impl<S, T> FromRequestParts<S> for QueryArray<T>
-where
-    S: Send + Sync,
-    T: serde::de::DeserializeOwned + Default,
-{
-    type Rejection = ErrorResponse;
-
-    async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Self, Self::Rejection> {
-        let query = match parts.uri.query() {
-            Some(query) => query,
-            None => return Ok(Self(T::default())),
-        };
-        let data = match serde_qs::from_str::<T>(query) {
-            Ok(data) => data,
-            Err(e) => return Err(format!("failed to decode query params: {e}").into()),
-        };
-        Ok(Self(data))
-    }
-}
-
-// // todo: fix it
-// #[derive(Deserialize)]
-// struct GetDevicesParams {
-//     address: Option<String>,
-//     #[serde(default)]
-//     filters: Vec<Filter>,
-//     #[serde(default)]
-//     limit: u32,
-//     #[serde(default)]
-//     offset: u32,
+// fn push_bind<'a, DB: sqlx::Database>(query: &mut QueryBuilder<'a, DB>, value: &'a Value)
+// where
+//     std::string::String: sqlx::Encode<'a, DB>,
+//     std::string::String: sqlx::Type<DB>,
+//     f64: sqlx::Encode<'a, DB>,
+//     f64: sqlx::Type<DB>,
+// {
+//     match value {
+//         Value::String(string) => query.push_bind(string),
+//         Value::F64(f64) => query.push_bind(f64),
+//     };
 // }
 
-// impl Default for GetDevicesParams {
-//     fn default() -> Self {
+// struct ErrorResponse {
+//     status_code: StatusCode,
+//     message: String,
+// }
+
+// impl<T: ToString> From<T> for ErrorResponse {
+//     fn from(value: T) -> Self {
 //         Self {
-//             address: None,
-//             filters: vec![],
-//             limit: 10,
-//             offset: 0,
+//             status_code: StatusCode::INTERNAL_SERVER_ERROR,
+//             message: value.to_string(),
 //         }
 //     }
 // }
 
-#[derive(Deserialize)]
-struct Filter {
-    field: String,
-    condition: String, // "=", "<", ">"
-    value: Value,
-}
-
-enum Value {
-    String(String),
-    F64(f64),
-}
-
-impl<'de> Deserialize<'de> for Value {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let value = String::deserialize(deserializer)?;
-        match value.parse::<f64>() {
-            Ok(v) => Ok(Value::F64(v)),
-            _ => Ok(Value::String(value)),
-        }
-    }
-}
-
-// #[derive(Serialize, Deserialize)]
-// struct DeviceResponse {
-//     address: String,
-//     version: String,
-//     device: serde_json::Value,
-//     updated_at: u64,
-// }
-
-// async fn get_devices(
-//     Extension(database): Extension<DatabasePointer>,
-//     QueryArray(params): QueryArray<GetDevicesParams>,
-// ) -> Result<impl IntoResponse, ErrorResponse> {
-//     for filter in &params.filters {
-//         if Database::is_filter_allowed(filter).is_err() {
-//             return Err(format!("{} field is not supporting for filtering", filter.field).into());
+// impl IntoResponse for ErrorResponse {
+//     fn into_response(self) -> Response {
+//         if self.status_code == StatusCode::INTERNAL_SERVER_ERROR {
+//             error!("internal server error: {}", self.message);
+//         }
+//         if self.message.is_empty() {
+//             self.status_code.into_response()
+//         } else {
+//             (self.status_code, self.message).into_response()
 //         }
 //     }
-//     let internal_devices = database.lock().await.query(params).await?;
-//     let mut external_devices: Vec<DeviceResponse> = Vec::with_capacity(internal_devices.len());
-//     for internal_device in &internal_devices {
-//         let device: serde_json::Value = {
-//             match internal_device.version.as_str() {
-//                 V1 => {
-//                     let device: serde_json::Value = serde_json::from_slice(&internal_device.data)?;
-//                     device
-//                 }
-//                 _ => {
-//                     return Err(format!(
-//                         "unknown version to convert internal device to external :{}",
-//                         internal_device.version
-//                     )
-//                     .into())
-//                 }
-//             }
+// }
+
+// async fn run_api(database: DatabasePointer) -> Res<()> {
+//     let app = Router::new()
+//         // .route("/devices", get(get_devices))
+//         .layer(Extension(database))
+//         .fallback(fallback);
+//     let addr = "127.0.0.1:9494";
+//     let listener = tokio::net::TcpListener::bind(&addr).await?;
+//     info!("listen on {addr} for HTTP requests");
+//     axum::serve(listener, app).await?;
+//     Ok(())
+// }
+
+// struct QueryArray<T>(pub T);
+
+// #[axum::async_trait]
+// impl<S, T> FromRequestParts<S> for QueryArray<T>
+// where
+//     S: Send + Sync,
+//     T: serde::de::DeserializeOwned + Default,
+// {
+//     type Rejection = ErrorResponse;
+
+//     async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Self, Self::Rejection> {
+//         let query = match parts.uri.query() {
+//             Some(query) => query,
+//             None => return Ok(Self(T::default())),
 //         };
-//         external_devices.push(DeviceResponse {
-//             address: internal_device.address.clone(),
-//             version: internal_device.version.clone(),
-//             device,
-//             updated_at: internal_device.updated_at as u64,
-//         })
+//         let data = match serde_qs::from_str::<T>(query) {
+//             Ok(data) => data,
+//             Err(e) => return Err(format!("failed to decode query params: {e}").into()),
+//         };
+//         Ok(Self(data))
 //     }
-//     Ok((StatusCode::OK, Json(external_devices)))
 // }
 
-async fn fallback() -> impl IntoResponse {
-    StatusCode::NOT_FOUND
-}
+// // // todo: fix it
+// // #[derive(Deserialize)]
+// // struct GetDevicesParams {
+// //     address: Option<String>,
+// //     #[serde(default)]
+// //     filters: Vec<Filter>,
+// //     #[serde(default)]
+// //     limit: u32,
+// //     #[serde(default)]
+// //     offset: u32,
+// // }
+
+// // impl Default for GetDevicesParams {
+// //     fn default() -> Self {
+// //         Self {
+// //             address: None,
+// //             filters: vec![],
+// //             limit: 10,
+// //             offset: 0,
+// //         }
+// //     }
+// // }
+
+// #[derive(Deserialize)]
+// struct Filter {
+//     field: String,
+//     condition: String, // "=", "<", ">"
+//     value: Value,
+// }
+
+// enum Value {
+//     String(String),
+//     F64(f64),
+// }
+
+// impl<'de> Deserialize<'de> for Value {
+//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+//     where
+//         D: serde::Deserializer<'de>,
+//     {
+//         let value = String::deserialize(deserializer)?;
+//         match value.parse::<f64>() {
+//             Ok(v) => Ok(Value::F64(v)),
+//             _ => Ok(Value::String(value)),
+//         }
+//     }
+// }
+
+// // #[derive(Serialize, Deserialize)]
+// // struct DeviceResponse {
+// //     address: String,
+// //     version: String,
+// //     device: serde_json::Value,
+// //     updated_at: u64,
+// // }
+
+// // async fn get_devices(
+// //     Extension(database): Extension<DatabasePointer>,
+// //     QueryArray(params): QueryArray<GetDevicesParams>,
+// // ) -> Result<impl IntoResponse, ErrorResponse> {
+// //     for filter in &params.filters {
+// //         if Database::is_filter_allowed(filter).is_err() {
+// //             return Err(format!("{} field is not supporting for filtering", filter.field).into());
+// //         }
+// //     }
+// //     let internal_devices = database.lock().await.query(params).await?;
+// //     let mut external_devices: Vec<DeviceResponse> = Vec::with_capacity(internal_devices.len());
+// //     for internal_device in &internal_devices {
+// //         let device: serde_json::Value = {
+// //             match internal_device.version.as_str() {
+// //                 V1 => {
+// //                     let device: serde_json::Value = serde_json::from_slice(&internal_device.data)?;
+// //                     device
+// //                 }
+// //                 _ => {
+// //                     return Err(format!(
+// //                         "unknown version to convert internal device to external :{}",
+// //                         internal_device.version
+// //                     )
+// //                     .into())
+// //                 }
+// //             }
+// //         };
+// //         external_devices.push(DeviceResponse {
+// //             address: internal_device.address.clone(),
+// //             version: internal_device.version.clone(),
+// //             device,
+// //             updated_at: internal_device.updated_at as u64,
+// //         })
+// //     }
+// //     Ok((StatusCode::OK, Json(external_devices)))
+// // }
+
+// async fn fallback() -> impl IntoResponse {
+//     StatusCode::NOT_FOUND
+// }

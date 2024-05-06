@@ -8,6 +8,7 @@ test:
 	cargo build
 	#cd ../emf_contract && make build
 	rm -rf measurements.json
+	rm -rf emf.indexer.sqlite
 	cargo test --jobs 1 -- --nocapture --test-threads 1 $(name)
 
 sql_format:

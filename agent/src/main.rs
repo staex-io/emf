@@ -82,7 +82,11 @@ async fn main() -> Res<()> {
         contract_address,
     };
 
-    tokio::spawn(async move { indexer::run(api, rpc).await });
+    tokio::spawn(async move {
+        if let Err(e) = indexer::run(api, rpc).await {
+            error!("failed to run indexer: {:?}", e)
+        }
+    });
     tokio::spawn(async move { start_tcp_server(state, stop_r).await });
 
     info!("agent started; waiting for termination signal");
