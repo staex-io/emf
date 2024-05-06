@@ -44,12 +44,15 @@ pub(crate) fn save(filepath: &str, value: u128) -> Res<Vec<u128>> {
     }
 
     let mut data: Data = serde_json::from_slice(&buf)?;
-    if data.first_measurement.eq(&UNIX_EPOCH) {
-        data.first_measurement = SystemTime::now();
-    }
     data.measurements.push(value);
 
-    if data.last_measurement.duration_since(data.first_measurement)? >= H24 {
+    let time_to_accumulate: u64 = std::env::var("TIME_TO_ACCUMULATE")
+        .unwrap_or(format!("{}", H24.as_secs()))
+        .parse()
+        .unwrap();
+    if data.last_measurement.duration_since(data.first_measurement)?
+        >= Duration::from_secs(time_to_accumulate)
+    {
         let saved_measurements = data.measurements.clone();
 
         data.first_measurement = UNIX_EPOCH;
@@ -82,7 +85,7 @@ mod tests {
     use crate::storage;
 
     #[test]
-    fn test() {
+    fn test_storage() {
         let filepath = format!("{}{}", temp_dir().to_string_lossy(), rand::random::<u128>());
         eprintln!("\nTemporary storage file path: {filepath}");
 

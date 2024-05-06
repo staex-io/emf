@@ -1,15 +1,22 @@
 use std::fmt::Debug;
 use std::io::ErrorKind;
 use std::net::SocketAddr;
-use std::str::from_utf8;
+use std::str::{from_utf8, FromStr};
 use std::time::Duration;
 
+use contract::{store_measurement, store_measurement_spike};
 use log::{debug, error, info, trace, LevelFilter};
 use serde::{Deserialize, Serialize};
+use subxt::backend::legacy::LegacyRpcMethods;
+use subxt::backend::rpc;
+use subxt::utils::AccountId32;
+use subxt::{OnlineClient, PolkadotConfig};
+use subxt_signer::sr25519::Keypair;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::{select, sync::watch, time::timeout};
 
+mod contract;
 mod emf_contract;
 mod storage;
 
@@ -43,6 +50,14 @@ struct RpcResponse {
     value: u128,
 }
 
+#[derive(Clone)]
+struct State {
+    api: OnlineClient<PolkadotConfig>,
+    rpc_legacy: LegacyRpcMethods<PolkadotConfig>,
+    keypair: Keypair,
+    contract_address: AccountId32,
+}
+
 #[tokio::main]
 async fn main() -> Res<()> {
     env_logger::builder()
@@ -50,7 +65,23 @@ async fn main() -> Res<()> {
         .filter_module("agent", LevelFilter::Trace)
         .init();
     let (stop_s, stop_r) = watch::channel(());
-    tokio::spawn(async move { start_tcp_server(stop_r).await });
+
+    let rpc_url = "ws://127.0.0.1:9944";
+    let api = OnlineClient::<PolkadotConfig>::from_url(rpc_url).await?;
+    let rpc = rpc::RpcClient::from_url(rpc_url).await?;
+    let rpc_legacy: LegacyRpcMethods<PolkadotConfig> = LegacyRpcMethods::new(rpc.clone());
+    let contract_address: AccountId32 =
+        AccountId32::from_str(&std::env::var("SMART_CONTRACT_ADDRESS")?)?;
+    let keypair = subxt_signer::sr25519::dev::bob();
+    let state = State {
+        api,
+        rpc_legacy,
+        keypair,
+        contract_address,
+    };
+
+    tokio::spawn(async move { start_tcp_server(state, stop_r).await });
+
     info!("agent started; waiting for termination signal");
     tokio::signal::ctrl_c().await?;
     debug!("received termination signal");
@@ -64,7 +95,7 @@ async fn main() -> Res<()> {
     Ok(())
 }
 
-async fn start_tcp_server(mut stop_r: watch::Receiver<()>) -> Res<()> {
+async fn start_tcp_server(state: State, mut stop_r: watch::Receiver<()>) -> Res<()> {
     let tcp_server_address = "127.0.0.1:3322";
     info!("starting tcp server on {}", tcp_server_address);
     let listener = TcpListener::bind(tcp_server_address).await?;
@@ -76,8 +107,9 @@ async fn start_tcp_server(mut stop_r: watch::Receiver<()>) -> Res<()> {
             }
             connection = listener.accept() => {
                 if let Ok(connection) = connection {
+                    let state = state.clone();
                     tokio::spawn(async move {
-                        if let Err(e) = process_connection(connection).await {
+                        if let Err(e) = process_connection(connection, state).await {
                             error!("failed to process connection: {}", e.0)
                         }
                     });
@@ -87,9 +119,9 @@ async fn start_tcp_server(mut stop_r: watch::Receiver<()>) -> Res<()> {
     }
 }
 
-async fn process_connection(connection: (TcpStream, SocketAddr)) -> Res<()> {
+async fn process_connection(connection: (TcpStream, SocketAddr), state: State) -> Res<()> {
     let (mut stream, addr) = connection;
-    trace!("new rcp client connected: {addr}");
+    trace!("new tcp client connected: {addr}");
 
     let mut buf: Vec<u8> = vec![0; 1024];
     let n = stream.read(&mut buf).await;
@@ -115,7 +147,7 @@ async fn process_connection(connection: (TcpStream, SocketAddr)) -> Res<()> {
 
     trace!("received new data from {} client: {}", addr, from_utf8(&buf)?);
     let req: RpcRequest = serde_json::from_slice(&buf)?;
-    handle_rpc_request(&req).await?;
+    handle_rpc_request(&req, state).await?;
     let mut buf: Vec<u8> = serde_json::to_vec(&RpcResponse { value: req.value })?;
     write(&mut stream, &mut buf).await
 }
@@ -128,18 +160,32 @@ async fn write(stream: &mut TcpStream, buf: &mut Vec<u8>) -> Res<()> {
     Ok(stream.write_all(buf).await?)
 }
 
-async fn handle_rpc_request(req: &RpcRequest) -> Res<()> {
+async fn handle_rpc_request(req: &RpcRequest, state: State) -> Res<()> {
+    if req.value > MAX_MEASUREMENT_VALUE {
+        return store_measurement_spike(
+            &state.api,
+            &state.rpc_legacy,
+            &state.keypair,
+            state.contract_address,
+            req.value,
+        )
+        .await;
+    }
     let last_iteration = storage::save(STORAGE_FILEPATH, req.value)?;
     if !last_iteration.is_empty() {
-        let mut _avg_value = 0;
+        let mut avg_value = 0;
         for value in &last_iteration {
-            _avg_value += value;
+            avg_value += value;
         }
-        _avg_value /= last_iteration.len() as u128;
-        // todo: store average value in smart contract
-    }
-    if req.value > MAX_MEASUREMENT_VALUE {
-        // todo: store spike in smart contract
+        avg_value /= last_iteration.len() as u128;
+        store_measurement(
+            &state.api,
+            &state.rpc_legacy,
+            &state.keypair,
+            state.contract_address,
+            avg_value,
+        )
+        .await?;
     }
     Ok(())
 }

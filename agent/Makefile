@@ -7,4 +7,5 @@ lint: fmt
 test:
 	cargo build
 	#cd ../emf_contract && make build
+	rm -rf measurements.json
 	cargo test --jobs 1 -- --nocapture --test-threads 1 $(name)
