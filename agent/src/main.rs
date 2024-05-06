@@ -18,6 +18,7 @@ use tokio::{select, sync::watch, time::timeout};
 
 mod contract;
 mod emf_contract;
+mod indexer;
 mod storage;
 
 const MAX_MEASUREMENT_VALUE: u128 = 10;
@@ -63,6 +64,7 @@ async fn main() -> Res<()> {
     env_logger::builder()
         .filter(None, LevelFilter::Off)
         .filter_module("agent", LevelFilter::Trace)
+        .filter_module("indexer", LevelFilter::Trace)
         .init();
     let (stop_s, stop_r) = watch::channel(());
 
@@ -74,12 +76,13 @@ async fn main() -> Res<()> {
         AccountId32::from_str(&std::env::var("SMART_CONTRACT_ADDRESS")?)?;
     let keypair = subxt_signer::sr25519::dev::bob();
     let state = State {
-        api,
+        api: api.clone(),
         rpc_legacy,
         keypair,
         contract_address,
     };
 
+    tokio::spawn(async move { indexer::run(api, rpc).await });
     tokio::spawn(async move { start_tcp_server(state, stop_r).await });
 
     info!("agent started; waiting for termination signal");

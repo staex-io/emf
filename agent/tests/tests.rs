@@ -1,26 +1,13 @@
-use std::{collections::HashMap, process::Stdio, str::from_utf8, time::Duration};
+use std::{process::Stdio, str::from_utf8, time::Duration};
 
-use contract_transcode::ContractMessageTranscoder;
-use emf_contract::api::{
-    self,
-    runtime_types::{
-        contracts_node_runtime::RuntimeEvent, pallet_contracts::pallet::Event as ContractsEvent,
-    },
-};
 use serde::{Deserialize, Serialize};
-use subxt::{
-    events::{Events, StaticEvent},
-    ext::sp_core::bytes::to_hex,
-    OnlineClient, PolkadotConfig,
-};
+use subxt::{OnlineClient, PolkadotConfig};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
     sync::oneshot,
     time::{sleep, timeout},
 };
-
-use crate::emf_contract::api::contracts::events::ContractEmitted;
 
 mod emf_contract;
 
@@ -196,17 +183,6 @@ async fn test_general_flow() {
     let rpc_url = "ws://127.0.0.1:9944";
     let api = OnlineClient::<PolkadotConfig>::from_url(rpc_url).await.unwrap();
 
-    let mut subscription = api.blocks().subscribe_finalized().await.unwrap();
-    tokio::spawn(async move {
-        loop {
-            let block = subscription.next().await.unwrap().unwrap();
-            let events = block.events().await.unwrap();
-            process_event(events);
-        }
-    });
-    // Wait 1s for block subscription logic and so ont.
-    sleep(Duration::from_secs(2)).await;
-
     create_entity(&smart_contract_address);
     create_sub_entity(&smart_contract_address);
 
@@ -287,7 +263,7 @@ async fn increase_block_timestamp(api: &OnlineClient<PolkadotConfig>) {
     // To increase block timestamp between measurements we need to make some transaction.
     // Otherwise timestamp on new measurement save will be the same
     // and we will get too fast revert error.
-    let transfer_tx = api::tx()
+    let transfer_tx = emf_contract::api::tx()
         .balances()
         .transfer_allow_death(subxt_signer::sr25519::dev::alice().public_key().into(), 1);
     api.tx()
@@ -297,27 +273,6 @@ async fn increase_block_timestamp(api: &OnlineClient<PolkadotConfig>) {
         .wait_for_finalized()
         .await
         .unwrap();
-}
-
-fn process_event(events: Events<PolkadotConfig>) {
-    let transcoder = ContractMessageTranscoder::load("assets/emf_contract.metadata.json").unwrap();
-    // Topic hash to it's name.
-    let mut topics: HashMap<String, String> = HashMap::new();
-    for event_meta in transcoder.metadata().spec().events() {
-        let topic = to_hex(event_meta.signature_topic().unwrap().as_bytes(), false);
-        topics.insert(topic, event_meta.label().clone());
-    }
-    for event in events.iter().flatten() {
-        if event.variant_name() != ContractEmitted::EVENT {
-            continue;
-        }
-        // Usually first topic is our actual smart contract (EMF) event.
-        let topic = event.topics()[0];
-        let event = event.as_root_event::<RuntimeEvent>().unwrap();
-        if let RuntimeEvent::Contracts(ContractsEvent::ContractEmitted { .. }) = event {
-            eprintln!("NEW EVENT: {}", topics.get(&to_hex(&topic.0, false)).unwrap());
-        }
-    }
 }
 
 async fn store_measurements(
