@@ -41,6 +41,7 @@ end
 
 == Certification steps ==
 
+meas_module -> agent: Produce measurements
 agent -> substrate: Store measurements
 
 ... In some time ...
@@ -53,16 +54,17 @@ for the whole month.
 And it is enough data
 to issue on-chain certificate.
 end note
-substrate -> substrate: Issue and store\n on-chain certificate
-substrate -> substrate: Produce on-chain\n event about new\n certificate
+substrate -> substrate: Spawn on-chain event\n about new ready\n to issue certificate
 else
   substrate ->x substrate: Stop current flow
 end
 
 ... In some time ...
 
-substrate -> telco: See new on-chain certificate\n on-chain event
-telco -> substrate: Get on-chain certificate
-substrate --> telco: Return on-chain\n certificate info
+substrate -> telco: See new ready\n on-chain certificate\n (an event)
+telco -> substrate: Get on-chain ready certificate
+substrate --> telco: Return on-chain\n ready certificate info
+telco -> substrate: Issue new certificate
+substrate -> substrate: Procudes on-chain event\n about new issued certificate
 
 @enduml
