@@ -1,18 +1,7 @@
-use std::{collections::HashMap, process::Stdio, str::from_utf8, time::Duration};
+use std::{process::Stdio, str::from_utf8, time::Duration};
 
-use contract_transcode::ContractMessageTranscoder;
-use emf_contract::api::{
-    self,
-    runtime_types::{
-        contracts_node_runtime::RuntimeEvent, pallet_contracts::pallet::Event as ContractsEvent,
-    },
-};
 use serde::{Deserialize, Serialize};
-use subxt::{
-    events::{Events, StaticEvent},
-    ext::sp_core::bytes::to_hex,
-    OnlineClient, PolkadotConfig,
-};
+use subxt::{utils::AccountId32, OnlineClient, PolkadotConfig};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -20,9 +9,8 @@ use tokio::{
     time::{sleep, timeout},
 };
 
-use crate::emf_contract::api::contracts::events::ContractEmitted;
-
 mod emf_contract;
+mod http_api;
 
 #[derive(Serialize, Deserialize)]
 struct RpcRequest {
@@ -196,17 +184,6 @@ async fn test_general_flow() {
     let rpc_url = "ws://127.0.0.1:9944";
     let api = OnlineClient::<PolkadotConfig>::from_url(rpc_url).await.unwrap();
 
-    let mut subscription = api.blocks().subscribe_finalized().await.unwrap();
-    tokio::spawn(async move {
-        loop {
-            let block = subscription.next().await.unwrap().unwrap();
-            let events = block.events().await.unwrap();
-            process_event(events);
-        }
-    });
-    // Wait 1s for block subscription logic and so ont.
-    sleep(Duration::from_secs(2)).await;
-
     create_entity(&smart_contract_address);
     create_sub_entity(&smart_contract_address);
 
@@ -218,11 +195,18 @@ async fn test_general_flow() {
     // we do not know how many rpc requests we need to make.
     store_measurements(&api, &tcp_server_address, 6, 6).await;
 
-    // Store measurement spikes to see too much spikes smart contract event.
+    // Store measurement spikes to see too many spikes smart contract event.
     store_measurements(&api, &tcp_server_address, 69, 2).await;
 
-    // todo: remove it after waiting for exact event by channel
-    sleep(Duration::from_secs(3)).await;
+    timeout(
+        Duration::from_secs(10),
+        wait_for_events(
+            subxt_signer::sr25519::dev::alice().public_key().to_account_id(),
+            subxt_signer::sr25519::dev::bob().public_key().to_account_id(),
+        ),
+    )
+    .await
+    .unwrap();
 }
 
 fn create_entity(smart_contract_address: &str) {
@@ -287,7 +271,7 @@ async fn increase_block_timestamp(api: &OnlineClient<PolkadotConfig>) {
     // To increase block timestamp between measurements we need to make some transaction.
     // Otherwise timestamp on new measurement save will be the same
     // and we will get too fast revert error.
-    let transfer_tx = api::tx()
+    let transfer_tx = emf_contract::api::tx()
         .balances()
         .transfer_allow_death(subxt_signer::sr25519::dev::alice().public_key().into(), 1);
     api.tx()
@@ -297,27 +281,6 @@ async fn increase_block_timestamp(api: &OnlineClient<PolkadotConfig>) {
         .wait_for_finalized()
         .await
         .unwrap();
-}
-
-fn process_event(events: Events<PolkadotConfig>) {
-    let transcoder = ContractMessageTranscoder::load("assets/emf_contract.metadata.json").unwrap();
-    // Topic hash to it's name.
-    let mut topics: HashMap<String, String> = HashMap::new();
-    for event_meta in transcoder.metadata().spec().events() {
-        let topic = to_hex(event_meta.signature_topic().unwrap().as_bytes(), false);
-        topics.insert(topic, event_meta.label().clone());
-    }
-    for event in events.iter().flatten() {
-        if event.variant_name() != ContractEmitted::EVENT {
-            continue;
-        }
-        // Usually first topic is our actual smart contract (EMF) event.
-        let topic = event.topics()[0];
-        let event = event.as_root_event::<RuntimeEvent>().unwrap();
-        if let RuntimeEvent::Contracts(ContractsEvent::ContractEmitted { .. }) = event {
-            eprintln!("NEW EVENT: {}", topics.get(&to_hex(&topic.0, false)).unwrap());
-        }
-    }
 }
 
 async fn store_measurements(
@@ -335,5 +298,52 @@ async fn store_measurements(
 
         // Wait some time before save new measurement to avoid too fast revert error.
         sleep(Duration::from_millis(1050)).await;
+    }
+}
+
+async fn wait_for_events(entity: AccountId32, sub_entity: AccountId32) {
+    loop {
+        eprintln!("new iteration of waiting events by http api");
+
+        let entities = http_api::request_entities().await;
+        if entities.is_empty() {
+            sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+        assert_eq!(entity.to_string(), entities[0].account_id);
+
+        let sub_entities = http_api::request_sub_entities(&entity).await;
+        if sub_entities.is_empty() {
+            sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+        assert_eq!(entity.to_string(), sub_entities[0].entity);
+        assert_eq!(sub_entity.to_string(), sub_entities[0].account_id);
+
+        let spikes = http_api::request_spikes(&sub_entity).await;
+        if spikes.len() != 2 {
+            sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+        assert_eq!(sub_entity.to_string(), spikes[0].sub_entity);
+        assert_eq!(sub_entity.to_string(), spikes[1].sub_entity);
+        assert_eq!(69.to_string(), spikes[0].value);
+        assert_eq!(69.to_string(), spikes[1].value);
+
+        let too_many_spikes = http_api::request_too_many_spikes(&sub_entity).await;
+        if too_many_spikes.is_empty() {
+            sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+        assert_eq!(sub_entity.to_string(), too_many_spikes[0].sub_entity);
+
+        let ready_certificates = http_api::request_ready_certificates(&sub_entity).await;
+        if ready_certificates.is_empty() {
+            sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+        assert_eq!(sub_entity.to_string(), ready_certificates[0].sub_entity);
+
+        return;
     }
 }

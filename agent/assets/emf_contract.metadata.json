@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0x9899cb31c588e62301969c0f4dcabf209318f08490e8f040f1da314be0f0a1e9",
+    "hash": "0x9722ff9c2c8c1193a8b24603de2aabee44aa8f60bd1cb0e498efc6f13956d124",
     "language": "ink! 5.0.0",
     "compiler": "rustc 1.78.0",
     "build_info": {
@@ -293,9 +293,9 @@
           }
         ],
         "docs": [],
-        "label": "TooMuchSpikes",
+        "label": "TooManySpikes",
         "module_path": "emf_contract::emf_contract",
-        "signature_topic": "0xcc3d990d0c8f9b3d63f9ab86bbf68cbe2868cd4c63c7a25da6ef0d7939410025"
+        "signature_topic": "0x884a810b081b2b3d4406b5916027f983b30933583f62194288d079bab0fe8f40"
       },
       {
         "args": [
