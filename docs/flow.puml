@@ -1,0 +1,68 @@
+@startuml Flow
+skinparam dpi 300
+autonumber
+
+participant Telco as telco
+participant Substrate as substrate
+participant Agent as agent
+participant "Meas. module" as meas_module
+participant "Meas. storage" as storage
+
+note over agent,storage: These modules are located on cell tower board.
+
+== Preparation steps ==
+
+telco -> telco: Admin generates new key pair\n for cell company
+telco -> telco: Admin generates new key pair\n for cell tower
+telco -> substrate: Create new entity
+telco -> substrate: Create new sub-entity
+telco -> agent: Install software with\n cell tower private key
+
+== Measurements steps ==
+
+loop In some interval
+  meas_module -> agent: Send measurement
+  alt If measurement > threshold
+    agent -> agent: Prepare transaction
+    agent -> agent: Sign transaction
+    agent -> substrate: Send signed\n transaction (store\n measurement spike)
+  end
+  agent -> storage: Store measurement
+end
+
+loop Every day
+  agent -> storage: Get measurements for the last day
+  storage --> agent: Return measurements
+  agent -> agent: Accumulate measurements
+  agent -> agent: Prepare transaction
+  agent -> agent: Sign transaction
+  agent -> substrate: Send transaction\n (store measurement)
+end
+
+== Certification steps ==
+
+agent -> substrate: Store measurements
+
+... In some time ...
+
+alt Received required amount of measurements
+note over substrate,agent
+It means we receive
+average measurements
+for the whole month.
+And it is enough data
+to issue on-chain certificate.
+end note
+substrate -> substrate: Issue and store\n on-chain certificate
+substrate -> substrate: Produce on-chain\n event about new\n certificate
+else
+  substrate ->x substrate: Stop current flow
+end
+
+... In some time ...
+
+substrate -> telco: See new on-chain certificate\n on-chain event
+telco -> substrate: Get on-chain certificate
+substrate --> telco: Return on-chain\n certificate info
+
+@enduml
