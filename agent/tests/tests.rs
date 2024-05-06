@@ -1,7 +1,7 @@
 use std::{process::Stdio, str::from_utf8, time::Duration};
 
 use serde::{Deserialize, Serialize};
-use subxt::{OnlineClient, PolkadotConfig};
+use subxt::{utils::AccountId32, OnlineClient, PolkadotConfig};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -10,6 +10,7 @@ use tokio::{
 };
 
 mod emf_contract;
+mod http_api;
 
 #[derive(Serialize, Deserialize)]
 struct RpcRequest {
@@ -197,8 +198,15 @@ async fn test_general_flow() {
     // Store measurement spikes to see too many spikes smart contract event.
     store_measurements(&api, &tcp_server_address, 69, 2).await;
 
-    // todo: remove it after waiting for exact event by channel
-    sleep(Duration::from_secs(3)).await;
+    timeout(
+        Duration::from_secs(10),
+        wait_for_events(
+            subxt_signer::sr25519::dev::alice().public_key().to_account_id(),
+            subxt_signer::sr25519::dev::bob().public_key().to_account_id(),
+        ),
+    )
+    .await
+    .unwrap();
 }
 
 fn create_entity(smart_contract_address: &str) {
@@ -290,5 +298,52 @@ async fn store_measurements(
 
         // Wait some time before save new measurement to avoid too fast revert error.
         sleep(Duration::from_millis(1050)).await;
+    }
+}
+
+async fn wait_for_events(entity: AccountId32, sub_entity: AccountId32) {
+    loop {
+        eprintln!("new iteration of waiting events by http api");
+
+        let entities = http_api::request_entities().await;
+        if entities.is_empty() {
+            sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+        assert_eq!(entity.to_string(), entities[0].account_id);
+
+        let sub_entities = http_api::request_sub_entities(&entity).await;
+        if sub_entities.is_empty() {
+            sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+        assert_eq!(entity.to_string(), sub_entities[0].entity);
+        assert_eq!(sub_entity.to_string(), sub_entities[0].account_id);
+
+        let spikes = http_api::request_spikes(&sub_entity).await;
+        if spikes.len() != 2 {
+            sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+        assert_eq!(sub_entity.to_string(), spikes[0].sub_entity);
+        assert_eq!(sub_entity.to_string(), spikes[1].sub_entity);
+        assert_eq!(69.to_string(), spikes[0].value);
+        assert_eq!(69.to_string(), spikes[1].value);
+
+        let too_many_spikes = http_api::request_too_many_spikes(&sub_entity).await;
+        if too_many_spikes.is_empty() {
+            sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+        assert_eq!(sub_entity.to_string(), too_many_spikes[0].sub_entity);
+
+        let ready_certificates = http_api::request_ready_certificates(&sub_entity).await;
+        if ready_certificates.is_empty() {
+            sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+        assert_eq!(sub_entity.to_string(), ready_certificates[0].sub_entity);
+
+        return;
     }
 }

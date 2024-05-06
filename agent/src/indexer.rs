@@ -54,7 +54,7 @@ impl DatabaseSaver for EntityCreated {
     async fn save(self, db: &DatabasePointer, timestamp: SystemTime) -> Res<()> {
         sqlx::query("insert into entities (account_id, created_at) values (?1, ?2)")
             .bind(self.entity.to_string())
-            .bind(timestamp.duration_since(UNIX_EPOCH)?.as_secs() as i64)
+            .bind(timestamp.duration_since(UNIX_EPOCH)?.as_secs() as u32)
             .execute(&mut db.lock().await.conn)
             .await?;
         Ok(())
@@ -110,7 +110,7 @@ impl DatabaseSaver for TooManySpikes {
     async fn save(self, db: &DatabasePointer, timestamp: SystemTime) -> Res<()> {
         sqlx::query("insert into too_many_spikes (sub_entity, created_at) values (?1, ?2)")
             .bind(self.sub_entity.to_string())
-            .bind(timestamp.duration_since(UNIX_EPOCH)?.as_secs() as i64)
+            .bind(timestamp.duration_since(UNIX_EPOCH)?.as_secs() as u32)
             .execute(&mut db.lock().await.conn)
             .await?;
         Ok(())
@@ -127,7 +127,7 @@ impl DatabaseSaver for CertificateReady {
     async fn save(self, db: &DatabasePointer, timestamp: SystemTime) -> Res<()> {
         sqlx::query("insert into ready_certificates (sub_entity, created_at) values (?1, ?2)")
             .bind(self.sub_entity.to_string())
-            .bind(timestamp.duration_since(UNIX_EPOCH)?.as_secs() as i64)
+            .bind(timestamp.duration_since(UNIX_EPOCH)?.as_secs() as u32)
             .execute(&mut db.lock().await.conn)
             .await?;
         Ok(())
@@ -429,7 +429,7 @@ impl Database {
 
     async fn read_sub_entities(&mut self, entity: AccountId32) -> Res<Vec<SubEntity>> {
         let sub_entities: Vec<SubEntity> =
-            sqlx::query_as::<_, SubEntity>("select * from sub_entities where account_id = ?1")
+            sqlx::query_as::<_, SubEntity>("select * from sub_entities where entity = ?1")
                 .bind(entity.to_string())
                 .fetch_all(&mut self.conn)
                 .await?;
