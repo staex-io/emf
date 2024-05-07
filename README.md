@@ -10,9 +10,15 @@ Within the smart contracts we would like to store each cell company and their ce
 
 We partner with a cell tower company that is particularly interested in reducing the operational costs associated with EMF certification. The automation of this process via blockchain would substantially reduce these costs.
 
+---
+
 ![](./docs/images/emf_general.png)
 
+---
+
 ![](./docs/images/emf_precise.png)
+
+---
 
 **[Flow](./docs/render/Flow.svg)**
 
