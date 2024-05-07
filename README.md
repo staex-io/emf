@@ -40,3 +40,7 @@ This software contains by three parts:
 3. [Indexer](./agent/) - part of the agent which listens for on-chain events and store them in the database
 
 ## Staex Public Network (SPN)
+
+If you want to provide more secure communication with your IoT devices you can use [Staex](https://staex.io) software and our Staex Public Network (https://staex.io/blog/public-network-for-iot-devices).
+
+[Here](https://docs.staex.io/how-to-guides/quick-start/) you can find precise documentation how to start own node and use it.
