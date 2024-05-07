@@ -22,6 +22,8 @@ We partner with a cell tower company that is particularly interested in reducing
 
 **[Flow](./docs/render/Flow.svg)**
 
+By flow below you can find how this software works step-by-step.
+
 EMF - electromagnetic field.
 
 Useful links about regulation:
@@ -30,3 +32,11 @@ Useful links about regulation:
 - https://www.tuvsud.com/en/resource-centre/stories/new-eu-security-legislation-under-radio-equipment-directive
 
 Our initial idea is to develop special measurement software in Rust which can be run on IoT devices. This software will accumulate data from the measurement module and store it on-chain using smart contracts. Using stored measurement we can issue on-chain certificates for cell towers companies through the smart contract.
+
+This software contains by three parts:
+
+1. [Smart contract](./emf_contract/) using [ink!](https://use.ink/) language
+2. [Agent](./agent/) - software which receives new measurements and store them on-chain
+3. [Indexer](./agent/) - part of the agent which listens for on-chain events and store them in the database
+
+## Staex Public Network (SPN)

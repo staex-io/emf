@@ -4,19 +4,19 @@ This folder contains everything about ink! smart contract.
 
 ## Usage
 
-To run all tests.
+To run all tests:
 
 ```shell
 make test
 ```
 
-To run single test.
+To run single test:
 
 ```shell
 make test name=test_issue_certificate_ok
 ```
 
-To build and deploy smart contract.
+To build and deploy smart contract:
 
 ```shell
 make run_substrate
