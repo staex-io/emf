@@ -13,9 +13,15 @@ export default {
 <template>
   <header>
     <nav>
-      <a href="/devices">
-        <img class="logo" alt="Staex logo" src="@/assets/logo-light.svg" />
+      <a href="/">
+        <img class="logo" alt="Staex logo" src="/favicon.svg" />
       </a>
+      <ul>
+        <li>
+          <RouterLink to="/map"> Map </RouterLink>
+          <RouterLink to="/entities"> Entities </RouterLink>
+        </li>
+      </ul>
     </nav>
   </header>
   <RouterView />

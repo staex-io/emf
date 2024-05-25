@@ -12,14 +12,14 @@
   },
   "dependencies": {
     "@fontsource/roboto": "^5.0.13",
-    "vue": "^3.4.26",
+    "vue": "^3.4.27",
     "vue-router": "^4.3.2"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.4",
     "vite": "^5.2.11",
-    "eslint": "^9.2.0",
-    "eslint-plugin-vue": "^9.25.0",
+    "eslint": "^9.3.0",
+    "eslint-plugin-vue": "^9.26.0",
     "prettier": "^3.2.5"
   }
 }
