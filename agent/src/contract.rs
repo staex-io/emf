@@ -5,10 +5,10 @@ use log::trace;
 use pallet_contracts_primitives::ContractExecResult;
 use subxt::{
     backend::legacy::LegacyRpcMethods,
-    config::{polkadot::H256, PolkadotExtrinsicParamsBuilder},
+    config::polkadot::{PolkadotExtrinsicParamsBuilder, H256},
     error::{RpcError, TransactionError},
     ext::codec::Encode,
-    tx::{Signer, TxPayload, TxStatus},
+    tx::{Payload, Signer, TxStatus},
     utils::{AccountId32, MultiAddress},
     OnlineClient, PolkadotConfig,
 };
@@ -162,7 +162,7 @@ fn init_transcoder() -> Res<ContractMessageTranscoder> {
     Ok(ContractMessageTranscoder::load("assets/emf_contract.metadata.json")?)
 }
 
-async fn submit_tx<Call: TxPayload, S: Signer<PolkadotConfig>>(
+async fn submit_tx<Call: Payload, S: Signer<PolkadotConfig>>(
     api: &OnlineClient<PolkadotConfig>,
     rpc_legacy: &LegacyRpcMethods<PolkadotConfig>,
     call: &Call,
