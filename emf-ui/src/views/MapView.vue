@@ -14,6 +14,12 @@ export default {
       minZoom: 8,
       maxZoom: 12,
     }).addTo(map)
+
+    const towerIcon = L.icon({
+      iconUrl: 'tower.svg',
+      iconSize: [30, 30],
+    })
+    L.marker([52.523, 13.381], { icon: towerIcon }).addTo(map).bindPopup('VantageTowers Tower#1')
   },
 }
 </script>
