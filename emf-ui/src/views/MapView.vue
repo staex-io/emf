@@ -24,9 +24,9 @@ export default {
 
 <style scoped>
 #map {
-  height: 500px;
+  height: 90vh;
   width: 100%;
-  margin-top: 1px;
+  margin: 1px 0 0 0;
   border-radius: 10px;
 }
 </style>
