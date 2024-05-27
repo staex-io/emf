@@ -16,6 +16,22 @@
   --staex-gray: rgb(192, 192, 192);
 }
 
+.leaflet-popup-content {
+  margin: 0;
+}
+
+.leaflet-popup-content-wrapper {
+  padding: 0;
+}
+
+.leaflet-popup-close-button > span {
+  color: var(--staex-golden-yellow);
+}
+
+.leaflet-popup-tip {
+  background-color: var(--staex-golden-yellow);
+}
+
 body {
   max-width: 1200px;
   margin: 0 auto;
@@ -216,6 +232,11 @@ select {
 .card:hover {
   transform: translateY(-5px);
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+}
+
+.card-static:hover {
+  transform: none;
+  box-shadow: none;
 }
 
 .card-header {
