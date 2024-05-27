@@ -33,10 +33,12 @@ export default {
     })
       .addTo(map)
       .on('click', () => {
-        this.cellTowerOpened = true
         L.popup([52.523, 13.381], {
           content: 'You see this tower card',
         })
+          .on('add', () => {
+            this.cellTowerOpened = true
+          })
           .on('remove', () => {
             this.cellTowerOpened = false
           })
