@@ -4,6 +4,7 @@ import * as L from 'leaflet'
 export default {
   data() {
     return {
+      cellTowerOpened: false,
       id: '[VantageTowers] Tower#1',
     }
   },
@@ -32,26 +33,34 @@ export default {
     })
       .addTo(map)
       .on('click', () => {
+        this.cellTowerOpened = true
         L.popup([52.523, 13.381], {
-          content: `
-  <div class="card-static">
-    <div class="card-header">${this.id}</div>
-    <div class="card-content">
-      <div class="card-field">
-        <span class="card-field-label">ID</span>
-        <span class="card-field-value">${this.id}</span>
-      </div>
-    </div>
-  </div>
-            `,
-        }).openOn(map)
+          content: 'You see this tower card',
+        })
+          .on('remove', () => {
+            this.cellTowerOpened = false
+          })
+          .openOn(map)
       })
   },
 }
 </script>
 
 <template>
-  <div id="map" />
+  <div class="float-container">
+    <div id="map" />
+    <div class="float-card">
+      <div v-if="cellTowerOpened" class="card card-static">
+        <div class="card-header">Cell Tower</div>
+        <div class="card-content">
+          <div class="card-field">
+            <span class="card-field-label">ID</span>
+            <span class="card-field-value">{{ id }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <style scoped>

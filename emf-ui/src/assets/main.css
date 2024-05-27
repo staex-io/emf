@@ -16,12 +16,10 @@
   --staex-gray: rgb(192, 192, 192);
 }
 
-.leaflet-popup-content {
-  margin: 0;
-}
-
 .leaflet-popup-content-wrapper {
-  padding: 0;
+  color: var(--staex-golden-yellow);
+  background-color: var(--staex-dark-pacific-blue);
+  border-radius: 10px;
 }
 
 .leaflet-popup-close-button > span {
@@ -391,4 +389,19 @@ select {
   100% {
     transform: rotate(360deg);
   }
+}
+
+.float-container {
+  position: relative;
+}
+
+.float-card {
+  position: absolute;
+  z-index: 400;
+  top: 5px;
+  right: 5px;
+}
+
+.float-card .card {
+  margin: 0;
 }
