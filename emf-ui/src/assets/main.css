@@ -379,6 +379,7 @@ select {
   margin-right: 5px;
   box-sizing: unset;
   animation: spin 2s linear infinite;
+  display: inline-block;
 }
 
 @keyframes spin {

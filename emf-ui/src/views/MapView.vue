@@ -57,6 +57,10 @@ export default {
             <span class="card-field-label">ID</span>
             <span class="card-field-value">{{ id }}</span>
           </div>
+          <div class="card-field loader-container">
+            <div class="loader" />
+            Loading...
+          </div>
         </div>
       </div>
     </div>
@@ -69,5 +73,11 @@ export default {
   width: 100%;
   margin: 1px 0 0 0;
   border-radius: 10px;
+}
+
+.loader-container {
+  display: flex;
+  justify-content: left;
+  align-items: center;
 }
 </style>
