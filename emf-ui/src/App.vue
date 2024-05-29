@@ -18,8 +18,8 @@ export default {
       </a>
       <ul>
         <li>
-          <RouterLink to="/map"> Map </RouterLink>
-          <RouterLink to="/entities"> Entities </RouterLink>
+          <RouterLink to="/map">Map</RouterLink>
+          <RouterLink to="/entities">Entities</RouterLink>
         </li>
       </ul>
     </nav>

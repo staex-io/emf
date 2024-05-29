@@ -207,6 +207,9 @@ async fn test_general_flow() {
     )
     .await
     .unwrap();
+
+    // eprintln!("Starting drift mode");
+    // sleep(Duration::from_secs(60 * 60)).await;
 }
 
 fn create_entity(smart_contract_address: &str) {
@@ -248,7 +251,7 @@ fn create_sub_entity(smart_contract_address: &str) {
                 &subxt_signer::sr25519::dev::bob().public_key().to_account_id().to_string()
             ),
             "--args",
-            "\"Berlin\"",
+            "\"52.6443,13.0792\"",
         ])
         .current_dir("../emf_contract")
         .output()

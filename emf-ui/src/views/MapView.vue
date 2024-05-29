@@ -4,14 +4,15 @@ import * as L from 'leaflet'
 export default {
   data() {
     return {
-      cellTowerOpened: false,
-      id: '[VantageTowers] Tower#1',
+      activeCellTower: null,
     }
   },
   mounted() {
+    // Restrict to go further than Germany on the map.
     const southWest = L.latLng(55.229, 3.779),
       northEast = L.latLng(47.339, 15.667),
       bounds = L.latLngBounds(southWest, northEast)
+    // Create map itself.
     const map = L.map('map', {
       attributionControl: false,
       maxBounds: bounds,
@@ -21,29 +22,52 @@ export default {
       minZoom: 8,
       maxZoom: 12,
     }).addTo(map)
-
+    // Initialize icon.
     const towerIcon = L.icon({
-      iconUrl: 'tower.svg',
+      iconUrl: '/tower.svg',
       iconSize: [50, 50],
     })
-    L.marker([52.523, 13.381], {
-      icon: towerIcon,
-      riseOnHover: true,
-      riseOffset: 250,
-    })
-      .addTo(map)
-      .on('click', () => {
-        L.popup([52.523, 13.381], {
-          content: 'You see this tower card',
+    // Fetch towers and show them.
+    this.getTowers().then((towers) => {
+      for (const tower of towers) {
+        const coordinates = tower.location.split(',')
+        const lat = coordinates[0]
+        const lng = coordinates[1]
+        L.marker([lat, lng], {
+          icon: towerIcon,
+          riseOnHover: true,
+          riseOffset: 250,
         })
-          .on('add', () => {
-            this.cellTowerOpened = true
+          .addTo(map)
+          .on('click', () => {
+            L.popup([lat, lng], {
+              content: 'You see this tower card',
+            })
+              .on('add', () => {
+                this.activeCellTower = {
+                  entity: tower.entity,
+                  accountId: tower.account_id,
+                }
+              })
+              .on('remove', () => {
+                this.activeCellTower = null
+              })
+              .openOn(map)
           })
-          .on('remove', () => {
-            this.cellTowerOpened = false
-          })
-          .openOn(map)
-      })
+      }
+    })
+  },
+  methods: {
+    async getTowers() {
+      const res = await fetch(`/indexer/sub-entities`, { method: 'GET' })
+      switch (res.status) {
+        case 200:
+          break
+        default:
+          throw 'invalid response status code'
+      }
+      return await res.json()
+    },
   },
 }
 </script>
@@ -52,12 +76,16 @@ export default {
   <div class="float-container">
     <div id="map" />
     <div class="float-card">
-      <div v-if="cellTowerOpened" class="card card-static">
+      <div v-if="activeCellTower !== null" class="card card-static">
         <div class="card-header">Cell Tower</div>
         <div class="card-content">
           <div class="card-field">
-            <span class="card-field-label">ID</span>
-            <span class="card-field-value">{{ id }}</span>
+            <span class="card-field-label">Entity</span>
+            <span class="card-field-value">{{ activeCellTower.entity }}</span>
+          </div>
+          <div class="card-field">
+            <span class="card-field-label">Account ID</span>
+            <span class="card-field-value">{{ activeCellTower.accountId }}</span>
           </div>
           <div class="card-field loader-container">
             <div class="loader" />

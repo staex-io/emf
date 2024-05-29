@@ -14,5 +14,8 @@ lint:
 run:
 	./run.sh bun dev --host 0.0.0.0
 
+run-docker:
+	./run.sh bun dev-docker --host 0.0.0.0
+
 build:
 	./run.sh bun run build

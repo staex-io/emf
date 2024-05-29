@@ -427,7 +427,15 @@ impl Database {
         Ok(entities)
     }
 
-    async fn read_sub_entities(&mut self, entity: AccountId32) -> Res<Vec<SubEntity>> {
+    async fn read_sub_entities(&mut self) -> Res<Vec<SubEntity>> {
+        let sub_entities: Vec<SubEntity> =
+            sqlx::query_as::<_, SubEntity>("select * from sub_entities ")
+                .fetch_all(&mut self.conn)
+                .await?;
+        Ok(sub_entities)
+    }
+
+    async fn read_sub_entities_by_entity(&mut self, entity: AccountId32) -> Res<Vec<SubEntity>> {
         let sub_entities: Vec<SubEntity> =
             sqlx::query_as::<_, SubEntity>("select * from sub_entities where entity = ?1")
                 .bind(entity.to_string())
@@ -546,7 +554,7 @@ async fn run_api(database: DatabasePointer) -> Res<()> {
 
 #[derive(Deserialize, Default)]
 struct QueryParams {
-    account_id: String,
+    account_id: Option<String>,
 }
 
 async fn get_entities(
@@ -560,8 +568,13 @@ async fn get_sub_entities(
     Extension(database): Extension<DatabasePointer>,
     QueryArray(params): QueryArray<QueryParams>,
 ) -> Result<impl IntoResponse, ErrorResponse> {
-    let entity: AccountId32 = AccountId32::from_str(&params.account_id)?;
-    let sub_entities = database.lock().await.read_sub_entities(entity).await?;
+    let sub_entities = match params.account_id {
+        Some(account_id) => {
+            let entity: AccountId32 = AccountId32::from_str(&account_id)?;
+            database.lock().await.read_sub_entities_by_entity(entity).await?
+        }
+        None => database.lock().await.read_sub_entities().await?,
+    };
     Ok((StatusCode::OK, Json(sub_entities)))
 }
 
@@ -569,7 +582,8 @@ async fn get_spikes(
     Extension(database): Extension<DatabasePointer>,
     QueryArray(params): QueryArray<QueryParams>,
 ) -> Result<impl IntoResponse, ErrorResponse> {
-    let sub_entity: AccountId32 = AccountId32::from_str(&params.account_id)?;
+    let sub_entity: AccountId32 =
+        AccountId32::from_str(&params.account_id.ok_or("account id is not present")?)?;
     let spikes = database.lock().await.read_spikes(sub_entity).await?;
     Ok((StatusCode::OK, Json(spikes)))
 }
@@ -578,7 +592,8 @@ async fn get_too_many_spikes(
     Extension(database): Extension<DatabasePointer>,
     QueryArray(params): QueryArray<QueryParams>,
 ) -> Result<impl IntoResponse, ErrorResponse> {
-    let sub_entity: AccountId32 = AccountId32::from_str(&params.account_id)?;
+    let sub_entity: AccountId32 =
+        AccountId32::from_str(&params.account_id.ok_or("account id is not present")?)?;
     let too_many_spikes = database.lock().await.read_too_many_spikes(sub_entity).await?;
     Ok((StatusCode::OK, Json(too_many_spikes)))
 }
@@ -587,7 +602,8 @@ async fn get_ready_certificates(
     Extension(database): Extension<DatabasePointer>,
     QueryArray(params): QueryArray<QueryParams>,
 ) -> Result<impl IntoResponse, ErrorResponse> {
-    let sub_entity: AccountId32 = AccountId32::from_str(&params.account_id)?;
+    let sub_entity: AccountId32 =
+        AccountId32::from_str(&params.account_id.ok_or("account id is not present")?)?;
     let ready_certificates = database.lock().await.read_ready_certificates(sub_entity).await?;
     Ok((StatusCode::OK, Json(ready_certificates)))
 }
