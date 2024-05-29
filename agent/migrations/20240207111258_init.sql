@@ -22,3 +22,9 @@ create table ready_certificates (
   sub_entity text not null references sub_entities (account_id),
   created_at integer
 );
+
+create table issued_certificates (
+  sub_entity text not null references sub_entities (account_id),
+  c_index integer not null ,
+  created_at integer
+);

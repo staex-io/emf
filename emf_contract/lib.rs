@@ -137,7 +137,9 @@ mod emf_contract {
 
     #[ink(event)]
     pub struct CertificateReady {
+        #[ink(topic)]
         pub entity: AccountId,
+        #[ink(topic)]
         pub sub_entity: AccountId,
     }
 
@@ -163,6 +165,7 @@ mod emf_contract {
         StorageExceeded,
         MeasurementTooFast,
         NotEnoughRecords,
+        CertificateNotFound,
         Unknown,
     }
 
@@ -578,6 +581,14 @@ mod emf_contract {
             });
 
             Ok(index)
+        }
+
+        #[ink(message)]
+        pub fn fetch_certificate(
+            &mut self,
+            index: CertificateIndexType,
+        ) -> Result<Certificate, EmfError> {
+            self.certificates.get(index).ok_or(EmfError::CertificateNotFound)
         }
 
         fn load_sub_entity(&self, sub_entity: AccountId) -> Result<SubEntity, EmfError> {

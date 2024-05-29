@@ -11,7 +11,8 @@ export default {
 </script>
 
 <template>
-  <header>
+  <!-- We need this id to adjust map height in MapView.vue -->
+  <header id="header">
     <nav>
       <a href="/">
         <img class="logo" alt="Staex logo" src="/favicon.svg" />

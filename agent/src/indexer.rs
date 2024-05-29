@@ -134,6 +134,27 @@ impl DatabaseSaver for CertificateReady {
     }
 }
 
+#[derive(scale::Decode)]
+struct CertificateIssued {
+    index: u128,
+    _entity: AccountId32,
+    sub_entity: AccountId32,
+}
+
+impl DatabaseSaver for CertificateIssued {
+    async fn save(self, db: &DatabasePointer, timestamp: SystemTime) -> Res<()> {
+        sqlx::query(
+            "insert into issued_certificates (sub_entity, c_index, created_at) values (?1, ?2, ?3)",
+        )
+        .bind(self.sub_entity.to_string())
+        .bind(self.index as u32)
+        .bind(timestamp.duration_since(UNIX_EPOCH)?.as_secs() as u32)
+        .execute(&mut db.lock().await.conn)
+        .await?;
+        Ok(())
+    }
+}
+
 trait DatabaseSaver {
     async fn save(self, db: &DatabasePointer, timestamp: SystemTime) -> Res<()>;
 }
@@ -265,6 +286,9 @@ async fn process_event(
             "CertificateReady" => {
                 prepare_event_data::<CertificateReady>(data, database, timestamp).await?
             }
+            "CertificateIssued" => {
+                prepare_event_data::<CertificateIssued>(data, database, timestamp).await?
+            }
             _ => return Ok(()),
         }
     }
@@ -391,6 +415,13 @@ struct ReadyCertificate {
     created_at: u32,
 }
 
+#[derive(sqlx::FromRow, Serialize)]
+struct IssuedCertificate {
+    sub_entity: String,
+    c_index: u32,
+    created_at: u32,
+}
+
 type DatabasePointer = Arc<Mutex<Database>>;
 
 struct Database {
@@ -475,6 +506,19 @@ impl Database {
         .await?;
         Ok(ready_certificates)
     }
+
+    async fn read_issued_certificates(
+        &mut self,
+        sub_entity: AccountId32,
+    ) -> Res<Vec<IssuedCertificate>> {
+        let issued_certificates: Vec<IssuedCertificate> = sqlx::query_as::<_, IssuedCertificate>(
+            "select * from issued_certificates where sub_entity = ?1",
+        )
+        .bind(sub_entity.to_string())
+        .fetch_all(&mut self.conn)
+        .await?;
+        Ok(issued_certificates)
+    }
 }
 
 struct ErrorResponse {
@@ -543,6 +587,7 @@ async fn run_api(database: DatabasePointer) -> Res<()> {
         .route("/spikes", get(get_spikes))
         .route("/too-many-spikes", get(get_too_many_spikes))
         .route("/ready-certificates", get(get_ready_certificates))
+        .route("/issued-certificates", get(get_issued_certificates))
         .layer(Extension(database))
         .fallback(fallback);
     let addr = "127.0.0.1:9494";
@@ -606,6 +651,16 @@ async fn get_ready_certificates(
         AccountId32::from_str(&params.account_id.ok_or("account id is not present")?)?;
     let ready_certificates = database.lock().await.read_ready_certificates(sub_entity).await?;
     Ok((StatusCode::OK, Json(ready_certificates)))
+}
+
+async fn get_issued_certificates(
+    Extension(database): Extension<DatabasePointer>,
+    QueryArray(params): QueryArray<QueryParams>,
+) -> Result<impl IntoResponse, ErrorResponse> {
+    let sub_entity: AccountId32 =
+        AccountId32::from_str(&params.account_id.ok_or("account id is not present")?)?;
+    let issued_certificates = database.lock().await.read_issued_certificates(sub_entity).await?;
+    Ok((StatusCode::OK, Json(issued_certificates)))
 }
 
 async fn fallback() -> impl IntoResponse {

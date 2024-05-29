@@ -201,6 +201,7 @@ async fn test_general_flow() {
     timeout(
         Duration::from_secs(10),
         wait_for_events(
+            &smart_contract_address,
             subxt_signer::sr25519::dev::alice().public_key().to_account_id(),
             subxt_signer::sr25519::dev::bob().public_key().to_account_id(),
         ),
@@ -259,6 +260,31 @@ fn create_sub_entity(smart_contract_address: &str) {
     assert!(res.status.success());
 }
 
+fn issue_certificate(smart_contract_address: &str) {
+    let res = std::process::Command::new("cargo")
+        .args(vec![
+            "contract",
+            "call",
+            "--contract",
+            smart_contract_address,
+            "--message",
+            "issue_certificate",
+            "--suri",
+            "//Alice",
+            "-x",
+            "--skip-confirm",
+            "--args",
+            &format!(
+                "\"{}\"",
+                &subxt_signer::sr25519::dev::bob().public_key().to_account_id().to_string()
+            ),
+        ])
+        .current_dir("../emf_contract")
+        .output()
+        .unwrap();
+    assert!(res.status.success());
+}
+
 async fn rpc_store_measurement(tcp_server_address: &str, value: u128) {
     let mut stream = TcpStream::connect(tcp_server_address).await.unwrap();
     let mut buf = serde_json::to_vec(&RpcRequest { value }).unwrap();
@@ -304,7 +330,12 @@ async fn store_measurements(
     }
 }
 
-async fn wait_for_events(entity: AccountId32, sub_entity: AccountId32) {
+async fn wait_for_events(
+    smart_contract_address: &str,
+    entity: AccountId32,
+    sub_entity: AccountId32,
+) {
+    let mut issued = false;
     loop {
         eprintln!("new iteration of waiting events by http api");
 
@@ -346,6 +377,19 @@ async fn wait_for_events(entity: AccountId32, sub_entity: AccountId32) {
             continue;
         }
         assert_eq!(sub_entity.to_string(), ready_certificates[0].sub_entity);
+
+        if !issued {
+            issued = true;
+            issue_certificate(smart_contract_address);
+            continue;
+        }
+
+        let issued_certificates = http_api::request_issued_certificates(&sub_entity).await;
+        if issued_certificates.is_empty() {
+            sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+        assert_eq!(sub_entity.to_string(), issued_certificates[0].sub_entity);
 
         return;
     }
