@@ -258,7 +258,7 @@ fn parse_revert(value: Value) -> Error {
 mod tests {
     use std::{str::FromStr, time::Duration};
 
-    use subxt::backend::rpc;
+    use subxt::{backend::rpc, config::Header};
     use tokio::time::sleep;
 
     use crate::emf_contract::api;
@@ -345,5 +345,32 @@ mod tests {
         )
         .await;
         eprintln!("{:?}", check_res);
+    }
+
+    #[tokio::test]
+    #[ignore = "use this test to send some test tokens locally"]
+    async fn faucet() {
+        let rpc_url = "ws://127.0.0.1:9944";
+        let api = OnlineClient::<PolkadotConfig>::from_url(rpc_url).await.unwrap();
+        let rpc = rpc::RpcClient::from_url(rpc_url).await.unwrap();
+        let rpc_legacy: LegacyRpcMethods<PolkadotConfig> = LegacyRpcMethods::new(rpc.clone());
+
+        let entity_keypair = subxt_signer::sr25519::dev::alice();
+        let address =
+            AccountId32::from_str("5FvLyPSLg9caiZPgdVyXB6uPJXxyC1zfSMR3EthQg1bTwVzR").unwrap();
+
+        let latest_block = rpc_legacy
+            .chain_get_block(None)
+            .await
+            .unwrap()
+            .ok_or_else(|| subxt::Error::Other("last block is not found".into()))
+            .unwrap();
+        let query = api::storage().system().account(&address);
+        let info = api.storage().at(latest_block.block.header.hash()).fetch(&query).await.unwrap();
+        eprintln!("Balance info: {:?}", info);
+
+        let transfer_tx =
+            api::tx().balances().transfer_allow_death(MultiAddress::Id(address), 1000000000000);
+        submit_tx(&api, &rpc_legacy, &transfer_tx, &entity_keypair).await.unwrap();
     }
 }
