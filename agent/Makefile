@@ -11,6 +11,9 @@ test:
 	rm -rf emf.indexer.sqlite
 	cargo test --jobs 1 -- --nocapture --test-threads 1 $(name)
 
+make drift:
+	DRIFT_MODE=1 make test
+
 sql_format:
 	docker run --rm \
 		-v "${PWD}/migrations:/migrations" \
