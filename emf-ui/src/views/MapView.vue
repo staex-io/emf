@@ -9,9 +9,15 @@ import metadata from '@/assets/emf_contract.metadata.json'
 export default {
   data() {
     return {
+      // If user click on cell tower it turns to active.
       activeCellTower: null,
-      certificateLoaded: false,
+      // Loading certificate index from database.
+      loadingCertificate: false,
+      // Fetching certificate data from Substrate node.
+      fetchingCertificate: false,
       certificate: null,
+      // Constant.
+      CertificateStatusNotIssued: 'Not issued',
     }
   },
   mounted() {
@@ -58,17 +64,28 @@ export default {
                   entity: tower.entity,
                   accountId: tower.account_id,
                 }
+                this.loadingCertificate = true
                 setTimeout(() => {
-                  this.loadCertificate(tower.account_id).then((certificate) => {
-                    this.certificateLoaded = true
+                  this.loadCertificate(tower.account_id).then((certificates) => {
+                    this.fetchingCertificate = true
+                    this.loadingCertificate = false
                     setTimeout(() => {
-                      this.fetchCertificate(certificate[0].c_index)
+                      if (certificates.length === 0) {
+                        this.certificate = { status: this.CertificateStatusNotIssued }
+                        this.fetchingCertificate = false
+                        return
+                      }
+                      this.fetchCertificate(certificates[0].c_index).then((certificate) => {
+                        this.certificate = certificate
+                        this.fetchingCertificate = false
+                      })
                     }, 1500)
                   })
                 }, 1500)
               })
               .on('remove', () => {
                 this.activeCellTower = null
+                this.certificate = null
               })
               .openOn(map)
           })
@@ -111,13 +128,13 @@ export default {
       const contract = new ContractPromise(
         api,
         metadata,
-        '5GsVSYcLAWXEF5mKMnBJZaXLJAKMFMKNsqXHYDyAVgfbi5XV',
+        '5GPGUPaCzQKHao1bQ5y9BybDzbpsbjAribjTQ3xSe1dcxJxe',
       )
       const { result, output } = await contractQuery(api, '', contract, 'fetch_certificate', {}, [
         index,
       ])
       if (!result.isOk) throw 'Error while fetching on-chain certificate.'
-      this.certificate = output.toJSON().ok.ok
+      return output.toJSON().ok.ok
     },
   },
 }
@@ -141,38 +158,45 @@ export default {
           <hr style="margin-bottom: 15px" />
           <div v-if="certificate === null" class="card-field loader-container">
             <div class="loader" />
-            <span v-if="!certificateLoaded">Loading certificate...</span>
-            <span v-if="certificateLoaded">Fetching on-chain data...</span>
+            <span v-if="loadingCertificate">Loading certificate...</span>
+            <span v-if="fetchingCertificate">Fetching on-chain data...</span>
           </div>
           <div v-else>
             <div class="card-field loader-container">
-              <img v-if="certificate.status === 'Ok'" alt="" src="/check.svg" style="width: 25px" />
-              <img v-else alt="" src="/cross.svg" style="width: 25px" />
+              <img v-if="certificate.status === 'Ok'" alt="" src="/check.svg" />
+              <img
+                v-else-if="certificate.status === CertificateStatusNotIssued"
+                alt=""
+                src="/question.svg"
+              />
+              <img v-else alt="" src="/cross.svg" />
               &nbsp;{{ certificate.status }}
             </div>
-            <div class="card-field">
-              <span class="card-field-label">Avg measurement</span>
-              <span class="card-field-value">{{ certificate.avgMeasurement }}</span>
-            </div>
-            <div class="card-field">
-              <span class="card-field-label">Min measurement</span>
-              <span class="card-field-value">{{ certificate.minMeasurement }}</span>
-            </div>
-            <div class="card-field">
-              <span class="card-field-label">Max measurement</span>
-              <span class="card-field-value">{{ certificate.maxMeasurement }}</span>
-            </div>
-            <div class="card-field">
-              <span class="card-field-label">First measurement</span>
-              <span class="card-field-value">
-                {{ new Date(certificate.firstMeasurementTimestamp).toUTCString() }}
-              </span>
-            </div>
-            <div class="card-field">
-              <span class="card-field-label">Last measurement</span>
-              <span class="card-field-value">
-                {{ new Date(certificate.lastMeasurementTimestamp).toUTCString() }}
-              </span>
+            <div v-if="certificate.status !== CertificateStatusNotIssued">
+              <div class="card-field">
+                <span class="card-field-label">Avg measurement</span>
+                <span class="card-field-value">{{ certificate.avgMeasurement }}</span>
+              </div>
+              <div class="card-field">
+                <span class="card-field-label">Min measurement</span>
+                <span class="card-field-value">{{ certificate.minMeasurement }}</span>
+              </div>
+              <div class="card-field">
+                <span class="card-field-label">Max measurement</span>
+                <span class="card-field-value">{{ certificate.maxMeasurement }}</span>
+              </div>
+              <div class="card-field">
+                <span class="card-field-label">First measurement</span>
+                <span class="card-field-value">
+                  {{ new Date(certificate.firstMeasurementTimestamp).toUTCString() }}
+                </span>
+              </div>
+              <div class="card-field">
+                <span class="card-field-label">Last measurement</span>
+                <span class="card-field-value">
+                  {{ new Date(certificate.lastMeasurementTimestamp).toUTCString() }}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -182,6 +206,10 @@ export default {
 </template>
 
 <style scoped>
+img {
+  width: 25px;
+}
+
 #map {
   height: 100vh;
   width: 100%;

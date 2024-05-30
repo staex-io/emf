@@ -1,6 +1,6 @@
 use std::{process::Stdio, str::from_utf8, time::Duration};
 
-use rand::Rng;
+use rand::{distributions::uniform::SampleRange, rngs::ThreadRng, Rng};
 use serde::{Deserialize, Serialize};
 use subxt::{utils::AccountId32, OnlineClient, PolkadotConfig};
 use subxt_signer::sr25519::Keypair;
@@ -53,7 +53,7 @@ fn start_substrate_contracts_node() -> ChildProcess {
     ChildProcess { child }
 }
 
-async fn deploy_smart_contract() -> String {
+async fn deploy_smart_contract(is_drift_mode: bool) -> String {
     tokio::process::Command::new("cargo")
         .args(vec!["contract", "upload", "--suri", "//Alice", "-x"])
         .kill_on_drop(true)
@@ -61,6 +61,10 @@ async fn deploy_smart_contract() -> String {
         .output()
         .await
         .unwrap();
+
+    // So in drift mode we don't need to increase block timestamp.
+    // To setup our environment faster.
+    let min_time_between_measurements_to_save = if is_drift_mode { "0" } else { "1" };
 
     let output = tokio::process::Command::new("cargo")
         .args(vec![
@@ -73,7 +77,7 @@ async fn deploy_smart_contract() -> String {
             "--args",
             "2",
             "--args",
-            "1",
+            min_time_between_measurements_to_save,
             "--args",
             "1",
             "--args",
@@ -124,6 +128,7 @@ fn start_agent(smart_contract_address: &str) -> ChildProcess {
 async fn test_general_flow() {
     eprintln!(); // to start test logs from new line
     let mut rng = rand::thread_rng();
+    let is_drift_mode = std::env::var("DRIFT_MODE").is_ok();
 
     // Start substrate contracts node and wait for its starting.
     let mut scn_child = start_substrate_contracts_node();
@@ -143,7 +148,7 @@ async fn test_general_flow() {
     });
     timeout(Duration::from_secs(10), scn_r).await.unwrap().unwrap();
 
-    let smart_contract_address = deploy_smart_contract().await;
+    let smart_contract_address = deploy_smart_contract(is_drift_mode).await;
     eprintln!("Smart contract address {smart_contract_address}");
 
     let mut agent_child = start_agent(&smart_contract_address);
@@ -191,7 +196,18 @@ async fn test_general_flow() {
     let api = OnlineClient::<PolkadotConfig>::from_url(rpc_url).await.unwrap();
 
     create_entity(&smart_contract_address);
-    create_sub_entity(&smart_contract_address, sub_entity.public_key().to_account_id());
+
+    if is_drift_mode {
+        eprintln!("Starting drift mode...");
+        prepare_drift_data(&smart_contract_address, &mut rng).await;
+        sleep(Duration::from_secs(60 * 60)).await;
+    }
+
+    create_sub_entity(
+        &smart_contract_address,
+        &sub_entity.public_key().to_account_id(),
+        "52.6443,13.0792",
+    );
 
     // Store ok measurements to see certificate ready smart contract event.
     // We need to make some rpc requests to store measurements.
@@ -199,11 +215,10 @@ async fn test_general_flow() {
     // smart contract ready.
     // Because our software (agent) accumulate several measurement before save
     // we do not know how many rpc requests we need to make.
-    store_measurements(&api, &tcp_server_address, rng.gen_range(1..10), 6, &entity, &sub_entity)
-        .await;
+    store_measurements(6, 1..11, &entity, &sub_entity, &api, &tcp_server_address, &mut rng).await;
 
     // Store measurement spikes to see too many spikes smart contract event.
-    store_measurements(&api, &tcp_server_address, 69, 2, &entity, &sub_entity).await;
+    store_measurements(2, 11..100, &entity, &sub_entity, &api, &tcp_server_address, &mut rng).await;
 
     timeout(
         Duration::from_secs(10),
@@ -215,20 +230,45 @@ async fn test_general_flow() {
     )
     .await
     .unwrap();
-
-    if std::env::var("DRIFT_MODE").is_ok() {
-        eprintln!("Starting drift mode...");
-        run_drift();
-        sleep(Duration::from_secs(60 * 60)).await;
-    }
 }
 
-fn run_drift() {
+async fn prepare_drift_data(smart_contract_address: &str, rng: &mut ThreadRng) {
+    // Charlie has good certificate.
+    let charlie = subxt_signer::sr25519::dev::charlie();
+    create_sub_entity(
+        smart_contract_address,
+        &charlie.public_key().to_account_id(),
+        "52.5805,13.3738",
+    );
+    // Dave has bad certificate.
+    let dave = subxt_signer::sr25519::dev::dave();
+    create_sub_entity(
+        smart_contract_address,
+        &dave.public_key().to_account_id(),
+        "52.6539,13.6093",
+    );
+    // Eve doesn't have certificate.
+    let eve = subxt_signer::sr25519::dev::eve();
+    create_sub_entity(smart_contract_address, &eve.public_key().to_account_id(), "52.3643,13.5043");
+
+    prepare_drift_tower(smart_contract_address, "//Charlie", rng, 1..11);
+    prepare_drift_tower(smart_contract_address, "//Dave", rng, 11..100);
+    prepare_drift_tower(smart_contract_address, "//Eve", rng, 0..100);
+
+    issue_certificate(smart_contract_address, &charlie.public_key().to_account_id());
+    issue_certificate(smart_contract_address, &dave.public_key().to_account_id());
+}
+
+fn prepare_drift_tower<R>(
+    smart_contract_address: &str,
+    sub_entity_suri: &str,
+    rng: &mut ThreadRng,
+    range: R,
+) where
+    R: SampleRange<u128> + Clone,
+{
     for _ in 0..10 {
-        tokio::spawn(async move {
-            // create_entity(&smart_contract_address);
-            // create_sub_entity(&smart_contract_address);
-        });
+        store_measurement(smart_contract_address, sub_entity_suri, rng.gen_range(range.clone()));
     }
 }
 
@@ -252,7 +292,7 @@ fn create_entity(smart_contract_address: &str) {
     assert!(res.status.success());
 }
 
-fn create_sub_entity(smart_contract_address: &str, sub_entity: AccountId32) {
+fn create_sub_entity(smart_contract_address: &str, sub_entity: &AccountId32, location: &str) {
     let res = std::process::Command::new("cargo")
         .args(vec![
             "contract",
@@ -268,7 +308,29 @@ fn create_sub_entity(smart_contract_address: &str, sub_entity: AccountId32) {
             "--args",
             &format!("\"{}\"", sub_entity),
             "--args",
-            "\"52.6443,13.0792\"",
+            &format!("\"{}\"", location),
+        ])
+        .current_dir("../emf_contract")
+        .output()
+        .unwrap();
+    assert!(res.status.success());
+}
+
+fn store_measurement(smart_contract_address: &str, sub_entity_suri: &str, value: u128) {
+    let res = std::process::Command::new("cargo")
+        .args(vec![
+            "contract",
+            "call",
+            "--contract",
+            smart_contract_address,
+            "--message",
+            "store_measurement",
+            "--suri",
+            sub_entity_suri,
+            "-x",
+            "--skip-confirm",
+            "--args",
+            &format!("\"{}\"", value),
         ])
         .current_dir("../emf_contract")
         .output()
@@ -328,16 +390,19 @@ async fn increase_block_timestamp(
         .unwrap();
 }
 
-async fn store_measurements(
-    api: &OnlineClient<PolkadotConfig>,
-    tcp_server_address: &str,
-    value: u128,
+async fn store_measurements<R>(
     count: usize,
+    range: R,
     entity: &Keypair,
     sub_entity: &Keypair,
-) {
+    api: &OnlineClient<PolkadotConfig>,
+    tcp_server_address: &str,
+    rng: &mut ThreadRng,
+) where
+    R: SampleRange<u128> + Clone,
+{
     for _ in 0..count {
-        rpc_store_measurement(tcp_server_address, value).await;
+        rpc_store_measurement(tcp_server_address, rng.gen_range(range.clone())).await;
 
         // To not make our transaction outdated after executing smart contract (store measurement).
         sleep(Duration::from_millis(1050)).await;
@@ -380,8 +445,8 @@ async fn wait_for_events(
         }
         assert_eq!(expected_sub_entity, spikes[0].sub_entity);
         assert_eq!(expected_sub_entity, spikes[1].sub_entity);
-        assert_eq!(69.to_string(), spikes[0].value);
-        assert_eq!(69.to_string(), spikes[1].value);
+        assert!(spikes[0].value.parse::<u128>().unwrap() >= 11);
+        assert!(spikes[1].value.parse::<u128>().unwrap() >= 11);
 
         let too_many_spikes = http_api::request_too_many_spikes(&sub_entity).await;
         if too_many_spikes.is_empty() {
