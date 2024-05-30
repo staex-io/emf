@@ -50,3 +50,13 @@ make test
 ```
 
 In tests we automatically start substrate contract node, build and deploy smart contract, run agent and indexer.
+
+## Drift
+
+In case you need fully automatically started environment you can use drift mode.
+
+This mode has a timeout for an hour after tests passing. Also it starts to generate random measurements for random entities and sub-entities.
+
+```shell
+make drift
+```

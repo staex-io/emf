@@ -3020,7 +3020,7 @@ pub mod api {
                 pub mod random_material {
                     use super::runtime_types;
                     pub type RandomMaterial =
-                        runtime_types::bounded_collections::bounded_vec::BoundedVec1<
+                        runtime_types::bounded_collections::bounded_vec::BoundedVec<
                             ::subxt::ext::subxt_core::utils::H256,
                         >;
                 }
@@ -4564,18 +4564,17 @@ pub mod api {
                 }
                 pub mod reserves {
                     use super::runtime_types;
-                    pub type Reserves =
-                        runtime_types::bounded_collections::bounded_vec::BoundedVec2<
-                            runtime_types::pallet_balances::types::ReserveData<
-                                [::core::primitive::u8; 8usize],
-                                ::core::primitive::u128,
-                            >,
-                        >;
+                    pub type Reserves = runtime_types::bounded_collections::bounded_vec::BoundedVec<
+                        runtime_types::pallet_balances::types::ReserveData<
+                            [::core::primitive::u8; 8usize],
+                            ::core::primitive::u128,
+                        >,
+                    >;
                     pub type Param0 = ::subxt::ext::subxt_core::utils::AccountId32;
                 }
                 pub mod holds {
                     use super::runtime_types;
-                    pub type Holds = runtime_types::bounded_collections::bounded_vec::BoundedVec3<
+                    pub type Holds = runtime_types::bounded_collections::bounded_vec::BoundedVec<
                         runtime_types::pallet_balances::types::IdAmount<
                             runtime_types::contracts_node_runtime::RuntimeHoldReason,
                             ::core::primitive::u128,
@@ -4585,7 +4584,7 @@ pub mod api {
                 }
                 pub mod freezes {
                     use super::runtime_types;
-                    pub type Freezes = runtime_types::bounded_collections::bounded_vec::BoundedVec4<
+                    pub type Freezes = runtime_types::bounded_collections::bounded_vec::BoundedVec<
                         runtime_types::pallet_balances::types::IdAmount<
                             (),
                             ::core::primitive::u128,
@@ -6311,7 +6310,7 @@ pub mod api {
                 pub mod pristine_code {
                     use super::runtime_types;
                     pub type PristineCode =
-                        runtime_types::bounded_collections::bounded_vec::BoundedVec5<
+                        runtime_types::bounded_collections::bounded_vec::BoundedVec<
                             ::core::primitive::u8,
                         >;
                     pub type Param0 = ::subxt::ext::subxt_core::utils::H256;
@@ -6334,7 +6333,7 @@ pub mod api {
                 pub mod deletion_queue {
                     use super::runtime_types;
                     pub type DeletionQueue =
-                        runtime_types::bounded_collections::bounded_vec::BoundedVec5<
+                        runtime_types::bounded_collections::bounded_vec::BoundedVec<
                             ::core::primitive::u8,
                         >;
                     pub type Param0 = ::core::primitive::u32;
@@ -6347,7 +6346,7 @@ pub mod api {
                 pub mod migration_in_progress {
                     use super::runtime_types;
                     pub type MigrationInProgress =
-                        runtime_types::bounded_collections::bounded_vec::BoundedVec5<
+                        runtime_types::bounded_collections::bounded_vec::BoundedVec<
                             ::core::primitive::u8,
                         >;
                 }
@@ -9083,7 +9082,7 @@ pub mod api {
                     use super::runtime_types;
                     pub type Metadata = runtime_types::pallet_assets::types::AssetMetadata<
                         ::core::primitive::u128,
-                        runtime_types::bounded_collections::bounded_vec::BoundedVec5<
+                        runtime_types::bounded_collections::bounded_vec::BoundedVec<
                             ::core::primitive::u8,
                         >,
                     >;
@@ -9543,67 +9542,7 @@ pub mod api {
                 #[encode_as_type(
                     crate_path = ":: subxt :: ext :: subxt_core :: ext :: scale_encode"
                 )]
-                pub struct BoundedVec1<_0>(pub ::subxt::ext::subxt_core::alloc::vec::Vec<_0>);
-                #[derive(
-                    :: subxt :: ext :: subxt_core :: ext :: codec :: Decode,
-                    :: subxt :: ext :: subxt_core :: ext :: codec :: Encode,
-                    :: subxt :: ext :: subxt_core :: ext :: scale_decode :: DecodeAsType,
-                    :: subxt :: ext :: subxt_core :: ext :: scale_encode :: EncodeAsType,
-                    Debug,
-                )]
-                # [codec (crate = :: subxt :: ext :: subxt_core :: ext :: codec)]
-                #[decode_as_type(
-                    crate_path = ":: subxt :: ext :: subxt_core :: ext :: scale_decode"
-                )]
-                #[encode_as_type(
-                    crate_path = ":: subxt :: ext :: subxt_core :: ext :: scale_encode"
-                )]
-                pub struct BoundedVec2<_0>(pub ::subxt::ext::subxt_core::alloc::vec::Vec<_0>);
-                #[derive(
-                    :: subxt :: ext :: subxt_core :: ext :: codec :: Decode,
-                    :: subxt :: ext :: subxt_core :: ext :: codec :: Encode,
-                    :: subxt :: ext :: subxt_core :: ext :: scale_decode :: DecodeAsType,
-                    :: subxt :: ext :: subxt_core :: ext :: scale_encode :: EncodeAsType,
-                    Debug,
-                )]
-                # [codec (crate = :: subxt :: ext :: subxt_core :: ext :: codec)]
-                #[decode_as_type(
-                    crate_path = ":: subxt :: ext :: subxt_core :: ext :: scale_decode"
-                )]
-                #[encode_as_type(
-                    crate_path = ":: subxt :: ext :: subxt_core :: ext :: scale_encode"
-                )]
-                pub struct BoundedVec3<_0>(pub ::subxt::ext::subxt_core::alloc::vec::Vec<_0>);
-                #[derive(
-                    :: subxt :: ext :: subxt_core :: ext :: codec :: Decode,
-                    :: subxt :: ext :: subxt_core :: ext :: codec :: Encode,
-                    :: subxt :: ext :: subxt_core :: ext :: scale_decode :: DecodeAsType,
-                    :: subxt :: ext :: subxt_core :: ext :: scale_encode :: EncodeAsType,
-                    Debug,
-                )]
-                # [codec (crate = :: subxt :: ext :: subxt_core :: ext :: codec)]
-                #[decode_as_type(
-                    crate_path = ":: subxt :: ext :: subxt_core :: ext :: scale_decode"
-                )]
-                #[encode_as_type(
-                    crate_path = ":: subxt :: ext :: subxt_core :: ext :: scale_encode"
-                )]
-                pub struct BoundedVec4<_0>(pub ::subxt::ext::subxt_core::alloc::vec::Vec<_0>);
-                #[derive(
-                    :: subxt :: ext :: subxt_core :: ext :: codec :: Decode,
-                    :: subxt :: ext :: subxt_core :: ext :: codec :: Encode,
-                    :: subxt :: ext :: subxt_core :: ext :: scale_decode :: DecodeAsType,
-                    :: subxt :: ext :: subxt_core :: ext :: scale_encode :: EncodeAsType,
-                    Debug,
-                )]
-                # [codec (crate = :: subxt :: ext :: subxt_core :: ext :: codec)]
-                #[decode_as_type(
-                    crate_path = ":: subxt :: ext :: subxt_core :: ext :: scale_decode"
-                )]
-                #[encode_as_type(
-                    crate_path = ":: subxt :: ext :: subxt_core :: ext :: scale_encode"
-                )]
-                pub struct BoundedVec5<_0>(pub ::subxt::ext::subxt_core::alloc::vec::Vec<_0>);
+                pub struct BoundedVec<_0>(pub ::subxt::ext::subxt_core::alloc::vec::Vec<_0>);
             }
             pub mod weak_bounded_vec {
                 use super::runtime_types;
@@ -11979,7 +11918,7 @@ pub mod api {
                     crate_path = ":: subxt :: ext :: subxt_core :: ext :: scale_encode"
                 )]
                 pub struct ContractInfo {
-                    pub trie_id: runtime_types::bounded_collections::bounded_vec::BoundedVec5<
+                    pub trie_id: runtime_types::bounded_collections::bounded_vec::BoundedVec<
                         ::core::primitive::u8,
                     >,
                     pub code_hash: ::subxt::ext::subxt_core::utils::H256,

@@ -36,6 +36,12 @@ pub struct ReadyCertificate {
     pub created_at: u32,
 }
 
+#[derive(Deserialize)]
+pub struct IssuedCertificate {
+    pub sub_entity: String,
+    pub created_at: u32,
+}
+
 pub async fn request_entities() -> Vec<Entity> {
     reqwest::get(format!("{HOST}/entities")).await.unwrap().json::<Vec<Entity>>().await.unwrap()
 }
@@ -72,6 +78,15 @@ pub async fn request_ready_certificates(sub_entity: &AccountId32) -> Vec<ReadyCe
         .await
         .unwrap()
         .json::<Vec<ReadyCertificate>>()
+        .await
+        .unwrap()
+}
+
+pub async fn request_issued_certificates(sub_entity: &AccountId32) -> Vec<IssuedCertificate> {
+    reqwest::get(format!("{HOST}/issued-certificates?account_id={sub_entity}"))
+        .await
+        .unwrap()
+        .json::<Vec<IssuedCertificate>>()
         .await
         .unwrap()
 }
