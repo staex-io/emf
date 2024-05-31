@@ -52,6 +52,7 @@ export default {
         if (e.errorMessage == 'TokenBelowMinimum') alert('Not enough tokens to proceed.')
         return
       }
+      this.entityInitialized = true
     },
   },
 }
@@ -71,7 +72,7 @@ export default {
   </div>
   <div v-if="signerAccount && !entityInitialized" style="text-align: center; margin: 25px">
     <button class="mouse-pointer" style="width: 100%; padding: 50px" @click="initEntity">
-      Init entity
+      Initialize entity
     </button>
   </div>
   <div v-if="entityInitialized">

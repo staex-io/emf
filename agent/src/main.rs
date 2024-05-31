@@ -135,6 +135,7 @@ async fn main() -> Res<()> {
 
             let entity_keypair = subxt_signer::sr25519::dev::alice();
             let address = AccountId32::from_str(&address).unwrap();
+            let query = emf_contract::api::storage().system().account(&address);
 
             let latest_block = rpc_legacy
                 .chain_get_block(None)
@@ -142,15 +143,24 @@ async fn main() -> Res<()> {
                 .unwrap()
                 .ok_or_else(|| subxt::Error::Other("last block is not found".into()))
                 .unwrap();
-            let query = emf_contract::api::storage().system().account(&address);
             let info =
                 api.storage().at(latest_block.block.header.hash()).fetch(&query).await.unwrap();
-            eprintln!("Balance info: {:?}", info);
+            eprintln!("Balance info before: {:?}", info);
 
             let transfer_tx = emf_contract::api::tx()
                 .balances()
                 .transfer_allow_death(MultiAddress::Id(address), 1000000000000);
             submit_tx(&api, &rpc_legacy, &transfer_tx, &entity_keypair).await.unwrap();
+
+            let latest_block = rpc_legacy
+                .chain_get_block(None)
+                .await
+                .unwrap()
+                .ok_or_else(|| subxt::Error::Other("last block is not found".into()))
+                .unwrap();
+            let info =
+                api.storage().at(latest_block.block.header.hash()).fetch(&query).await.unwrap();
+            eprintln!("Balance info after: {:?}", info);
         }
     }
     Ok(())
