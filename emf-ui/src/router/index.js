@@ -17,6 +17,11 @@ const router = createRouter({
       component: MapView,
     },
     {
+      path: '/map/:location',
+      name: 'map-precise-location',
+      component: MapView,
+    },
+    {
       path: '/entities/',
       name: 'entities',
       component: EntitiesView,

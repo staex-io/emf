@@ -1,4 +1,6 @@
 <script>
+import router from '@/router'
+
 import { initializeApiContract } from '@/smart-contract.js'
 import { contractTx } from '@scio-labs/use-inkathon'
 import { web3FromAddress } from '@polkadot/extension-dapp'
@@ -181,6 +183,16 @@ export default {
         return
       }
       alert('Cell tower certificate successfully issued!')
+      this.readyToIssue.delete(subEntity)
+      this.issued.set(subEntity, null)
+    },
+    goToCellTower(location) {
+      router.push({
+        name: 'map-precise-location',
+        params: {
+          location,
+        },
+      })
     },
   },
 }
@@ -208,6 +220,7 @@ export default {
         type="text"
         name="subEntity"
         style="margin-bottom: 25px"
+        placeholder="5CS3ZHVZRSKckfQ583aCszSsMiJ6F32kNUGgxTvzdTpdcrCh"
       />
       <label for="location">Cell tower location (lat,lng)</label>
       <input
@@ -254,7 +267,9 @@ export default {
           </thead>
           <tbody>
             <tr v-for="{ account_id, location } in subEntities" :key="account_id">
-              <td>{{ account_id }}</td>
+              <td class="mouse-pointer" @click="() => goToCellTower(location)">
+                {{ account_id }}
+              </td>
               <td>
                 <a :href="`https://www.google.com/maps/place/${location}`" target="_blank">
                   {{ location }}
