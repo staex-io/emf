@@ -268,7 +268,7 @@ fn prepare_drift_tower<R>(
 ) where
     R: SampleRange<u128> + Clone,
 {
-    for _ in 0..10 {
+    for _ in 0..2 {
         store_measurement(smart_contract_address, sub_entity_suri, rng.gen_range(range.clone()));
     }
 }

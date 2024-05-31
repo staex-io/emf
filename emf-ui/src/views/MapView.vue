@@ -133,7 +133,7 @@ export default {
         <div class="card-header">Cell Tower</div>
         <div class="card-content">
           <div class="card-field">
-            <span class="card-field-label">Entity</span>
+            <span class="card-field-label">Cell company</span>
             <span class="card-field-value">{{ activeCellTower.entity }}</span>
           </div>
           <div class="card-field">
