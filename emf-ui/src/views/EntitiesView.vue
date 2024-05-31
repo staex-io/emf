@@ -17,6 +17,8 @@ export default {
       newSubEntity: '',
       newLocation: '',
       subEntities: [],
+      readyToIssue: new Map(),
+      issued: new Map(),
     }
   },
   async mounted() {
@@ -59,6 +61,42 @@ export default {
           throw 'invalid response status code'
       }
       this.subEntities = await res.json()
+    }
+    {
+      // Fetch ready certificates.
+      for (const subEntity of this.subEntities) {
+        const res = await fetch(`/indexer/ready-certificates?account_id=${subEntity.account_id}`, {
+          method: 'GET',
+        })
+        switch (res.status) {
+          case 200:
+            break
+          default:
+            throw 'invalid response status code'
+        }
+        const data = await res.json()
+        if (data.length !== 0) {
+          this.readyToIssue.set(data[0].sub_entity, null)
+        }
+      }
+    }
+    {
+      // Fetch issued certificates.
+      for (const subEntity of this.subEntities) {
+        const res = await fetch(`/indexer/issued-certificates?account_id=${subEntity.account_id}`, {
+          method: 'GET',
+        })
+        switch (res.status) {
+          case 200:
+            break
+          default:
+            throw 'invalid response status code'
+        }
+        const data = await res.json()
+        if (data.length !== 0) {
+          this.issued.set(data[0].sub_entity, null)
+        }
+      }
     }
   },
   methods: {
@@ -223,9 +261,15 @@ export default {
                 </a>
               </td>
               <td style="text-align: right">
-                <button class="action-btn" @click="() => issueCertificate(account_id)">
+                <button
+                  v-if="readyToIssue.get(account_id) === null"
+                  class="action-btn"
+                  @click="() => issueCertificate(account_id)"
+                >
                   Issue
                 </button>
+                <span v-else-if="issued.get(account_id) === null">Issued</span>
+                <span v-else>Not ready</span>
               </td>
             </tr>
           </tbody>

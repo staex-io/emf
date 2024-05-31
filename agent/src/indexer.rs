@@ -143,6 +143,7 @@ struct CertificateIssued {
 
 impl DatabaseSaver for CertificateIssued {
     async fn save(self, db: &DatabasePointer, timestamp: SystemTime) -> Res<()> {
+        // Save new issued certificate.
         sqlx::query(
             "insert into issued_certificates (sub_entity, c_index, created_at) values (?1, ?2, ?3)",
         )
@@ -151,6 +152,13 @@ impl DatabaseSaver for CertificateIssued {
         .bind(timestamp.duration_since(UNIX_EPOCH)?.as_secs() as u32)
         .execute(&mut db.lock().await.conn)
         .await?;
+
+        // Make ready certificate is not active.
+        sqlx::query("update ready_certificates set is_active = false where sub_entity = ?1")
+            .bind(self.sub_entity.to_string())
+            .execute(&mut db.lock().await.conn)
+            .await?;
+
         Ok(())
     }
 }
@@ -499,7 +507,7 @@ impl Database {
         sub_entity: AccountId32,
     ) -> Res<Vec<ReadyCertificate>> {
         let ready_certificates: Vec<ReadyCertificate> = sqlx::query_as::<_, ReadyCertificate>(
-            "select * from ready_certificates where sub_entity = ?1",
+            "select * from ready_certificates where sub_entity = ?1 and is_active = true",
         )
         .bind(sub_entity.to_string())
         .fetch_all(&mut self.conn)
