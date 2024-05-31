@@ -112,6 +112,7 @@ async fn deploy_smart_contract(is_drift_mode: bool) -> String {
 
 fn start_agent(smart_contract_address: &str) -> ChildProcess {
     let child = tokio::process::Command::new("target/debug/agent")
+        .args(vec!["run"])
         .env("RUST_LOG", "TRACE")
         .env("SMART_CONTRACT_ADDRESS", smart_contract_address)
         .env("TIME_TO_ACCUMULATE", "1")
@@ -250,10 +251,18 @@ async fn prepare_drift_data(smart_contract_address: &str, rng: &mut ThreadRng) {
     // Eve doesn't have certificate.
     let eve = subxt_signer::sr25519::dev::eve();
     create_sub_entity(smart_contract_address, &eve.public_key().to_account_id(), "52.3643,13.5043");
+    // Ferdie doesn't have enough records.
+    let ferdie = subxt_signer::sr25519::dev::ferdie();
+    create_sub_entity(
+        smart_contract_address,
+        &ferdie.public_key().to_account_id(),
+        "52.3966,13.0593",
+    );
 
-    prepare_drift_tower(smart_contract_address, "//Charlie", rng, 1..11);
-    prepare_drift_tower(smart_contract_address, "//Dave", rng, 11..100);
-    prepare_drift_tower(smart_contract_address, "//Eve", rng, 0..100);
+    prepare_drift_tower(smart_contract_address, "//Charlie", rng, 1..11, 2);
+    prepare_drift_tower(smart_contract_address, "//Dave", rng, 11..100, 2);
+    prepare_drift_tower(smart_contract_address, "//Eve", rng, 0..100, 2);
+    prepare_drift_tower(smart_contract_address, "//Ferdie", rng, 0..100, 1);
 
     issue_certificate(smart_contract_address, &charlie.public_key().to_account_id());
     issue_certificate(smart_contract_address, &dave.public_key().to_account_id());
@@ -264,10 +273,11 @@ fn prepare_drift_tower<R>(
     sub_entity_suri: &str,
     rng: &mut ThreadRng,
     range: R,
+    count: usize,
 ) where
     R: SampleRange<u128> + Clone,
 {
-    for _ in 0..10 {
+    for _ in 0..count {
         store_measurement(smart_contract_address, sub_entity_suri, rng.gen_range(range.clone()));
     }
 }

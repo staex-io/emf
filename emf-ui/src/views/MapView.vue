@@ -1,10 +1,8 @@
 <script>
 import * as L from 'leaflet'
 
-import { ContractPromise } from '@polkadot/api-contract'
-import { ApiPromise, WsProvider } from '@polkadot/api'
+import { initializeApiContract } from '@/smart-contract.js'
 import { contractQuery } from '@scio-labs/use-inkathon'
-import metadata from '@/assets/emf_contract.metadata.json'
 
 export default {
   data() {
@@ -21,6 +19,20 @@ export default {
     }
   },
   mounted() {
+    // Prepare precise or default map.
+    const { location } = this.$route.params
+    let lat
+    let lng
+    let precision
+    if (location === undefined) {
+      lat = 52.523
+      lng = 13.381
+      precision = 10
+    } else {
+      lat = location.split(',')[0]
+      lng = location.split(',')[1]
+      precision = 14
+    }
     // Restrict to go further than Germany on the map.
     const southWest = L.latLng(55.229, 3.779),
       northEast = L.latLng(47.339, 15.667),
@@ -30,10 +42,10 @@ export default {
       attributionControl: false,
       maxBounds: bounds,
       doubleClickZoom: false,
-    }).setView([52.523, 13.381], 10)
+    }).setView([lat, lng], precision)
     L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
       minZoom: 8,
-      maxZoom: 12,
+      maxZoom: 14,
     }).addTo(map)
     // Adjust map height.
     const headerHeight = document.querySelector('#header').offsetHeight
@@ -79,9 +91,9 @@ export default {
                         this.certificate = certificate
                         this.fetchingCertificate = false
                       })
-                    }, 1500)
+                    }, 1000)
                   })
-                }, 1500)
+                }, 1000)
               })
               .on('remove', () => {
                 this.activeCellTower = null
@@ -116,20 +128,7 @@ export default {
       return await res.json()
     },
     async fetchCertificate(index) {
-      // Connect to Substrate and init API and contract.
-      const provider = new WsProvider('ws://127.0.0.1:9944')
-      const api = await ApiPromise.create({ provider })
-      const [chain, nodeName, nodeVersion] = await Promise.all([
-        api.rpc.system.chain(),
-        api.rpc.system.name(),
-        api.rpc.system.version(),
-      ])
-      console.log(`You are connected to chain ${chain} using ${nodeName} v${nodeVersion}`)
-      const contract = new ContractPromise(
-        api,
-        metadata,
-        '5GPGUPaCzQKHao1bQ5y9BybDzbpsbjAribjTQ3xSe1dcxJxe',
-      )
+      const { api, contract } = await initializeApiContract()
       const { result, output } = await contractQuery(api, '', contract, 'fetch_certificate', {}, [
         index,
       ])
@@ -148,7 +147,7 @@ export default {
         <div class="card-header">Cell Tower</div>
         <div class="card-content">
           <div class="card-field">
-            <span class="card-field-label">Entity</span>
+            <span class="card-field-label">Cell company</span>
             <span class="card-field-value">{{ activeCellTower.entity }}</span>
           </div>
           <div class="card-field">

@@ -31,6 +31,7 @@
 }
 
 body {
+  min-width: 450px;
   margin: 0 auto;
   padding: 0;
   font-family: Roboto, Montserrat, sans;
@@ -39,10 +40,6 @@ body {
 h1 {
   text-align: center;
   color: var(--staex-pacific-blue);
-}
-
-pre {
-  margin-bottom: 0;
 }
 
 header {
@@ -106,7 +103,7 @@ input {
 button {
   background-color: var(--staex-gray);
   color: var(--staex-white);
-  padding: 20px 15px;
+  padding: 10px 20px;
   border: none;
   border-radius: 4px;
   cursor: pointer;
@@ -147,23 +144,6 @@ button:disabled:hover {
 .error {
   color: var(--staex-white);
   background-color: var(--staex-red);
-}
-
-.container {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin: 0;
-  padding: 0;
-}
-
-.item {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex: 1;
-  margin: 0;
-  padding: 0;
 }
 
 table {
@@ -268,82 +248,6 @@ select {
   color: var(--staex-medium-pacific-blue);
 }
 
-.form-container {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.form-container select,
-.form-container input {
-  flex: 1;
-  margin: 0 10px;
-}
-
-.form-container input {
-  flex: 2;
-}
-
-.form-container > *:first-child {
-  margin-left: 0;
-}
-
-.form-container > *:last-child {
-  margin-right: 0;
-}
-
-.submenu {
-  display: none;
-  position: absolute;
-  background-color: var(--staex-stardust-silver);
-  box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.2);
-  padding: 10px 0;
-  border-radius: 0px 0px 10px 10px;
-  z-index: 1;
-}
-
-.submenu li {
-  padding: 10px 20px;
-  text-align: left;
-}
-
-.submenu li a {
-  padding: 10px 20px;
-  color: var(--staex-dark-pacific-blue);
-  text-decoration: none;
-  display: block;
-}
-
-.submenu li a:hover {
-  background-color: var(--staex-light-pacific-blue);
-  color: var(--staex-white);
-}
-
-.menu-item:hover .submenu {
-  display: block;
-}
-
-@media (max-width: 800px) {
-  .form-container {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .form-container > * {
-    margin: 5px 0 !important;
-    width: auto !important;
-  }
-
-  .form-container > *:first-child {
-    margin-top: 0 !important;
-  }
-
-  .form-container > *:last-child {
-    margin-bottom: 0 !important;
-  }
-}
-
 @media (max-width: 800px) {
   .nav-desktop {
     display: none;
@@ -356,17 +260,32 @@ select {
   }
 }
 
+.container {
+  display: flex;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  align-content: center;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+}
+
+.item {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+}
+
 .h-scroll-container {
   max-width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   /* To not hide content by horizontal scroll view. */
   padding-bottom: 5px;
-}
-
-.loader-container {
-  display: inline-flex;
-  align-items: center;
 }
 
 .loader {

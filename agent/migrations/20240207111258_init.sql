@@ -20,6 +20,7 @@ create table too_many_spikes (
 
 create table ready_certificates (
   sub_entity text not null references sub_entities (account_id),
+  is_active boolean not null default true,
   created_at integer
 );
 

@@ -74,6 +74,30 @@ pub(crate) async fn store_measurement_spike(
     submit_tx(api, rpc_legacy, &call, keypair).await
 }
 
+pub(crate) async fn submit_tx<Call: Payload, S: Signer<PolkadotConfig>>(
+    api: &OnlineClient<PolkadotConfig>,
+    rpc_legacy: &LegacyRpcMethods<PolkadotConfig>,
+    call: &Call,
+    signer: &S,
+) -> Res<()> {
+    let account_id = signer.account_id();
+    let account_nonce = get_nonce(api, rpc_legacy, &account_id).await?;
+    let params = PolkadotExtrinsicParamsBuilder::new().nonce(account_nonce).build();
+    let mut tx = api.tx().create_signed(call, signer, params).await?.submit_and_watch().await?;
+    while let Some(status) = tx.next().await {
+        match status? {
+            TxStatus::InBestBlock(_) | TxStatus::InFinalizedBlock(_) => {
+                return Ok(());
+            }
+            TxStatus::Error { message } => return Err(TransactionError::Error(message).into()),
+            TxStatus::Invalid { message } => return Err(TransactionError::Invalid(message).into()),
+            TxStatus::Dropped { message } => return Err(TransactionError::Dropped(message).into()),
+            _ => continue,
+        }
+    }
+    Err(RpcError::SubscriptionDropped.into())
+}
+
 #[cfg(test)]
 async fn create_entity(
     api: &OnlineClient<PolkadotConfig>,
@@ -160,30 +184,6 @@ impl DryRunResult {
 
 fn init_transcoder() -> Res<ContractMessageTranscoder> {
     Ok(ContractMessageTranscoder::load("assets/emf_contract.metadata.json")?)
-}
-
-async fn submit_tx<Call: Payload, S: Signer<PolkadotConfig>>(
-    api: &OnlineClient<PolkadotConfig>,
-    rpc_legacy: &LegacyRpcMethods<PolkadotConfig>,
-    call: &Call,
-    signer: &S,
-) -> Res<()> {
-    let account_id = signer.account_id();
-    let account_nonce = get_nonce(api, rpc_legacy, &account_id).await?;
-    let params = PolkadotExtrinsicParamsBuilder::new().nonce(account_nonce).build();
-    let mut tx = api.tx().create_signed(call, signer, params).await?.submit_and_watch().await?;
-    while let Some(status) = tx.next().await {
-        match status? {
-            TxStatus::InBestBlock(_) | TxStatus::InFinalizedBlock(_) => {
-                return Ok(());
-            }
-            TxStatus::Error { message } => return Err(TransactionError::Error(message).into()),
-            TxStatus::Invalid { message } => return Err(TransactionError::Invalid(message).into()),
-            TxStatus::Dropped { message } => return Err(TransactionError::Dropped(message).into()),
-            _ => continue,
-        }
-    }
-    Err(RpcError::SubscriptionDropped.into())
 }
 
 async fn dry_run(
