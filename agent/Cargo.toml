@@ -6,19 +6,20 @@ edition = "2021"
 [dependencies]
 log = { version = "0.4.21", features = [], default-features = false }
 env_logger = { version = "0.11.3", features = ["auto-color", "humantime"], default-features = false }
-tokio = { version = "1.37.0", features = ["macros", "io-util", "rt-multi-thread", "sync", "signal", "time", "net"], default-features = false }
-serde = { version = "1.0.202", features = [], default-features = false }
+tokio = { version = "1.38.0", features = ["macros", "io-util", "rt-multi-thread", "sync", "signal", "time", "net"], default-features = false }
+serde = { version = "1.0.203", features = [], default-features = false }
 serde_json = { version = "1.0.117", features = [], default-features = false }
-subxt = { version = "0.36.0", features = ["substrate-compat"], default-features = true }
-subxt-signer = { version = "0.36.0", features = [], default-features = true }
+subxt = { version = "0.37.0", features = ["substrate-compat"], default-features = true }
+subxt-signer = { version = "0.37.0", features = [], default-features = true }
 contract-transcode = { version = "4.1.1", features = [], default-features = false }
 scale = { package = "parity-scale-codec", version = "3.6.12", features = ["derive"], default-features = false }
 pallet-contracts-primitives = { version = "29.0.0", features = [], default-features = true }
 axum = { version = "0.7.5", features = [], default-features = true }
 sqlx = { version = "0.7.4", features = ["sqlite", "migrate", "macros"], default-features = false }
 serde_qs = { version = "0.13.0", features = [], default-features = false }
+clap = { version = "4.5.4", features = ["std", "derive", "help"], default-features = false }
 
 [dev-dependencies]
-tokio = { version = "1.37.0", features = ["process"], default-features = false }
+tokio = { version = "1.38.0", features = ["process"], default-features = false }
 rand = { version = "0.8.5", features = [], default-features = true }
 reqwest = { version = "0.12.4", features = ["json"], default-features = false }

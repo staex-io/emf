@@ -4,10 +4,25 @@ Software which receives and accumulate new measurements and store on-chain by in
 
 ## Usage
 
+```shell
+Command line utility to interact with EMF agent
+
+Usage: 
+
+Commands:
+  run     Run agent
+  faucet  Faucet some account with test tokens
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
+```
+
 To run agent you can use following command:
 
 ```shell
-cargo run
+cargo run -- run
 ```
 
 Agent configuration can be updated by two environment variables:
@@ -31,6 +46,26 @@ Agent stores measurements in `measurements.json` file:
     6
   ]
 }
+```
+
+## Faucet
+
+If you are working locally you can faucet some tokens to your account by:
+
+```shell
+Faucet some account with test tokens
+
+Usage: 
+
+Arguments:
+  [ADDRESS]  Specify address to faucet [default: 5FvLyPSLg9caiZPgdVyXB6uPJXxyC1zfSMR3EthQg1bTwVzR]
+
+Options:
+  -h, --help  Print help
+```
+
+```shell
+cargo run -- faucet <address>
 ```
 
 ## Indexer

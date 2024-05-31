@@ -1,9 +1,8 @@
 <script>
-import { ContractPromise } from '@polkadot/api-contract'
-import { ApiPromise, WsProvider } from '@polkadot/api'
+import { initializeApiContract } from '@/smart-contract.js'
 import { contractTx } from '@scio-labs/use-inkathon'
-import metadata from '@/assets/emf_contract.metadata.json'
-import { web3Enable, web3Accounts, web3FromAddress } from '@polkadot/extension-dapp'
+import { web3FromAddress } from '@polkadot/extension-dapp'
+import { initializeSigner } from '@/signer-extension'
 
 export default {
   data() {
@@ -13,17 +12,12 @@ export default {
     }
   },
   async mounted() {
-    const signerExtensions = await new web3Enable('EMF')
-    if (signerExtensions.length === 0) {
-      alert('Please, connect signer extension to use the website!')
+    try {
+      this.signerAccount = await initializeSigner()
+    } catch (e) {
+      alert(e)
       return
     }
-    const signerAccounts = await web3Accounts({})
-    if (signerAccounts.length === 0) {
-      alert('Please, connect signer extension to use the website!')
-      return
-    }
-    this.signerAccount = signerAccounts[0]
     const res = await fetch(`/indexer/entities`, { method: 'GET' })
     switch (res.status) {
       case 200:
@@ -46,24 +40,9 @@ export default {
   },
   methods: {
     async initEntity() {
-      // todo: move to separate function and use in every view
-      // Connect to Substrate and init API and contract.
-      const provider = new WsProvider('ws://127.0.0.1:9944')
-      const api = await ApiPromise.create({ provider })
-      const [chain, nodeName, nodeVersion] = await Promise.all([
-        api.rpc.system.chain(),
-        api.rpc.system.name(),
-        api.rpc.system.version(),
-      ])
-      console.log(`You are connected to chain ${chain} using ${nodeName} v${nodeVersion}`)
-      const contract = new ContractPromise(
-        api,
-        metadata,
-        '5GPGUPaCzQKHao1bQ5y9BybDzbpsbjAribjTQ3xSe1dcxJxe',
-      )
+      const { api, contract } = await initializeApiContract()
       const injector = await web3FromAddress(this.signerAccount.address)
       api.setSigner(injector.signer)
-
       try {
         // This method can also override current value for provided key.
         // If you try to update key with the same value as record already has,
@@ -90,12 +69,12 @@ export default {
       There are no connected accounts (see signer extension request).
     </p>
   </div>
-  <div v-if="!entityInitialized" style="text-align: center; margin: 25px">
+  <div v-if="signerAccount && !entityInitialized" style="text-align: center; margin: 25px">
     <button class="mouse-pointer" style="width: 100%; padding: 50px" @click="initEntity">
       Init entity
     </button>
   </div>
-  <div v-else>
+  <div v-if="entityInitialized">
     <h1>Entities</h1>
   </div>
 </template>

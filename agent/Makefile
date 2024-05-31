@@ -9,7 +9,7 @@ test:
 	#cd ../emf_contract && make build
 	rm -rf measurements.json
 	rm -rf emf.indexer.sqlite
-	cargo test --jobs 1 -- --nocapture --test-threads 1 $(name)
+	cargo test --jobs 1 -- --nocapture --test-threads 1 test_general_flow
 
 make drift:
 	DRIFT_MODE=1 make test

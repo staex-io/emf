@@ -112,6 +112,7 @@ async fn deploy_smart_contract(is_drift_mode: bool) -> String {
 
 fn start_agent(smart_contract_address: &str) -> ChildProcess {
     let child = tokio::process::Command::new("target/debug/agent")
+        .args(vec!["run"])
         .env("RUST_LOG", "TRACE")
         .env("SMART_CONTRACT_ADDRESS", smart_contract_address)
         .env("TIME_TO_ACCUMULATE", "1")

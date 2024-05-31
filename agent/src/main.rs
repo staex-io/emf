@@ -4,12 +4,14 @@ use std::net::SocketAddr;
 use std::str::{from_utf8, FromStr};
 use std::time::Duration;
 
-use contract::{store_measurement, store_measurement_spike};
+use clap::{Parser, Subcommand};
+use contract::{store_measurement, store_measurement_spike, submit_tx};
 use log::{debug, error, info, trace, LevelFilter};
 use serde::{Deserialize, Serialize};
 use subxt::backend::legacy::LegacyRpcMethods;
 use subxt::backend::rpc;
-use subxt::utils::AccountId32;
+use subxt::config::Header;
+use subxt::utils::{AccountId32, MultiAddress};
 use subxt::{OnlineClient, PolkadotConfig};
 use subxt_signer::sr25519::Keypair;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -22,6 +24,8 @@ mod indexer;
 mod storage;
 
 const MAX_MEASUREMENT_VALUE: u128 = 10;
+
+const SUBSTRATE_RPC_URL: &str = "ws://127.0.0.1:9944";
 
 const STORAGE_FILEPATH: &str = "measurements.json";
 
@@ -59,6 +63,27 @@ struct State {
     contract_address: AccountId32,
 }
 
+/// Command line utility to interact with EMF agent.
+#[derive(Parser)]
+#[clap(name = "agent")]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    #[clap(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Run agent.
+    Run {},
+    /// Faucet some account with test tokens.
+    Faucet {
+        /// Specify address to faucet.
+        #[arg(default_value = "5FvLyPSLg9caiZPgdVyXB6uPJXxyC1zfSMR3EthQg1bTwVzR")]
+        address: String,
+    },
+}
+
 #[tokio::main]
 async fn main() -> Res<()> {
     env_logger::builder()
@@ -66,37 +91,66 @@ async fn main() -> Res<()> {
         .filter_module("agent", LevelFilter::Trace)
         .filter_module("indexer", LevelFilter::Trace)
         .init();
-    let (stop_s, stop_r) = watch::channel(());
 
-    let rpc_url = "ws://127.0.0.1:9944";
-    let api = OnlineClient::<PolkadotConfig>::from_url(rpc_url).await?;
-    let rpc = rpc::RpcClient::from_url(rpc_url).await?;
-    let rpc_legacy: LegacyRpcMethods<PolkadotConfig> = LegacyRpcMethods::new(rpc.clone());
-    let contract_address: AccountId32 =
-        AccountId32::from_str(&std::env::var("SMART_CONTRACT_ADDRESS")?)?;
-    let keypair = subxt_signer::sr25519::dev::bob();
-    let state = State {
-        api: api.clone(),
-        rpc_legacy,
-        keypair,
-        contract_address,
-    };
+    let cli = Cli::parse();
+    match cli.command {
+        Commands::Run {} => {
+            let (stop_s, stop_r) = watch::channel(());
 
-    tokio::spawn(async move {
-        if let Err(e) = indexer::run(api, rpc).await {
-            error!("failed to run indexer: {:?}", e)
+            let api = OnlineClient::<PolkadotConfig>::from_url(SUBSTRATE_RPC_URL).await?;
+            let rpc = rpc::RpcClient::from_url(SUBSTRATE_RPC_URL).await?;
+            let rpc_legacy: LegacyRpcMethods<PolkadotConfig> = LegacyRpcMethods::new(rpc.clone());
+            let contract_address: AccountId32 =
+                AccountId32::from_str(&std::env::var("SMART_CONTRACT_ADDRESS")?)?;
+            let keypair = subxt_signer::sr25519::dev::bob();
+            let state = State {
+                api: api.clone(),
+                rpc_legacy,
+                keypair,
+                contract_address,
+            };
+
+            tokio::spawn(async move {
+                if let Err(e) = indexer::run(api, rpc).await {
+                    error!("failed to run indexer: {:?}", e)
+                }
+            });
+            tokio::spawn(async move { start_tcp_server(state, stop_r).await });
+
+            info!("agent started; waiting for termination signal");
+            tokio::signal::ctrl_c().await?;
+            debug!("received termination signal");
+            stop_s.send(())?;
+            match timeout(Duration::from_secs(10), stop_s.closed()).await {
+                Ok(_) => info!("everything was stopped successfully"),
+                Err(e) => {
+                    error!("failed to stop everything: {}", e)
+                }
+            }
         }
-    });
-    tokio::spawn(async move { start_tcp_server(state, stop_r).await });
+        Commands::Faucet { address } => {
+            let api = OnlineClient::<PolkadotConfig>::from_url(SUBSTRATE_RPC_URL).await.unwrap();
+            let rpc = rpc::RpcClient::from_url(SUBSTRATE_RPC_URL).await.unwrap();
+            let rpc_legacy: LegacyRpcMethods<PolkadotConfig> = LegacyRpcMethods::new(rpc.clone());
 
-    info!("agent started; waiting for termination signal");
-    tokio::signal::ctrl_c().await?;
-    debug!("received termination signal");
-    stop_s.send(())?;
-    match timeout(Duration::from_secs(10), stop_s.closed()).await {
-        Ok(_) => info!("everything was stopped successfully"),
-        Err(e) => {
-            error!("failed to stop everything: {}", e)
+            let entity_keypair = subxt_signer::sr25519::dev::alice();
+            let address = AccountId32::from_str(&address).unwrap();
+
+            let latest_block = rpc_legacy
+                .chain_get_block(None)
+                .await
+                .unwrap()
+                .ok_or_else(|| subxt::Error::Other("last block is not found".into()))
+                .unwrap();
+            let query = emf_contract::api::storage().system().account(&address);
+            let info =
+                api.storage().at(latest_block.block.header.hash()).fetch(&query).await.unwrap();
+            eprintln!("Balance info: {:?}", info);
+
+            let transfer_tx = emf_contract::api::tx()
+                .balances()
+                .transfer_allow_death(MultiAddress::Id(address), 1000000000000);
+            submit_tx(&api, &rpc_legacy, &transfer_tx, &entity_keypair).await.unwrap();
         }
     }
     Ok(())

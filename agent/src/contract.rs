@@ -74,6 +74,30 @@ pub(crate) async fn store_measurement_spike(
     submit_tx(api, rpc_legacy, &call, keypair).await
 }
 
+pub(crate) async fn submit_tx<Call: Payload, S: Signer<PolkadotConfig>>(
+    api: &OnlineClient<PolkadotConfig>,
+    rpc_legacy: &LegacyRpcMethods<PolkadotConfig>,
+    call: &Call,
+    signer: &S,
+) -> Res<()> {
+    let account_id = signer.account_id();
+    let account_nonce = get_nonce(api, rpc_legacy, &account_id).await?;
+    let params = PolkadotExtrinsicParamsBuilder::new().nonce(account_nonce).build();
+    let mut tx = api.tx().create_signed(call, signer, params).await?.submit_and_watch().await?;
+    while let Some(status) = tx.next().await {
+        match status? {
+            TxStatus::InBestBlock(_) | TxStatus::InFinalizedBlock(_) => {
+                return Ok(());
+            }
+            TxStatus::Error { message } => return Err(TransactionError::Error(message).into()),
+            TxStatus::Invalid { message } => return Err(TransactionError::Invalid(message).into()),
+            TxStatus::Dropped { message } => return Err(TransactionError::Dropped(message).into()),
+            _ => continue,
+        }
+    }
+    Err(RpcError::SubscriptionDropped.into())
+}
+
 #[cfg(test)]
 async fn create_entity(
     api: &OnlineClient<PolkadotConfig>,
@@ -162,30 +186,6 @@ fn init_transcoder() -> Res<ContractMessageTranscoder> {
     Ok(ContractMessageTranscoder::load("assets/emf_contract.metadata.json")?)
 }
 
-async fn submit_tx<Call: Payload, S: Signer<PolkadotConfig>>(
-    api: &OnlineClient<PolkadotConfig>,
-    rpc_legacy: &LegacyRpcMethods<PolkadotConfig>,
-    call: &Call,
-    signer: &S,
-) -> Res<()> {
-    let account_id = signer.account_id();
-    let account_nonce = get_nonce(api, rpc_legacy, &account_id).await?;
-    let params = PolkadotExtrinsicParamsBuilder::new().nonce(account_nonce).build();
-    let mut tx = api.tx().create_signed(call, signer, params).await?.submit_and_watch().await?;
-    while let Some(status) = tx.next().await {
-        match status? {
-            TxStatus::InBestBlock(_) | TxStatus::InFinalizedBlock(_) => {
-                return Ok(());
-            }
-            TxStatus::Error { message } => return Err(TransactionError::Error(message).into()),
-            TxStatus::Invalid { message } => return Err(TransactionError::Invalid(message).into()),
-            TxStatus::Dropped { message } => return Err(TransactionError::Dropped(message).into()),
-            _ => continue,
-        }
-    }
-    Err(RpcError::SubscriptionDropped.into())
-}
-
 async fn dry_run(
     rpc_legacy: &LegacyRpcMethods<PolkadotConfig>,
     contract_addr: AccountId32,
@@ -258,7 +258,7 @@ fn parse_revert(value: Value) -> Error {
 mod tests {
     use std::{str::FromStr, time::Duration};
 
-    use subxt::{backend::rpc, config::Header};
+    use subxt::backend::rpc;
     use tokio::time::sleep;
 
     use crate::emf_contract::api;
@@ -345,32 +345,5 @@ mod tests {
         )
         .await;
         eprintln!("{:?}", check_res);
-    }
-
-    #[tokio::test]
-    #[ignore = "use this test to send some test tokens locally"]
-    async fn faucet() {
-        let rpc_url = "ws://127.0.0.1:9944";
-        let api = OnlineClient::<PolkadotConfig>::from_url(rpc_url).await.unwrap();
-        let rpc = rpc::RpcClient::from_url(rpc_url).await.unwrap();
-        let rpc_legacy: LegacyRpcMethods<PolkadotConfig> = LegacyRpcMethods::new(rpc.clone());
-
-        let entity_keypair = subxt_signer::sr25519::dev::alice();
-        let address =
-            AccountId32::from_str("5FvLyPSLg9caiZPgdVyXB6uPJXxyC1zfSMR3EthQg1bTwVzR").unwrap();
-
-        let latest_block = rpc_legacy
-            .chain_get_block(None)
-            .await
-            .unwrap()
-            .ok_or_else(|| subxt::Error::Other("last block is not found".into()))
-            .unwrap();
-        let query = api::storage().system().account(&address);
-        let info = api.storage().at(latest_block.block.header.hash()).fetch(&query).await.unwrap();
-        eprintln!("Balance info: {:?}", info);
-
-        let transfer_tx =
-            api::tx().balances().transfer_allow_death(MultiAddress::Id(address), 1000000000000);
-        submit_tx(&api, &rpc_legacy, &transfer_tx, &entity_keypair).await.unwrap();
     }
 }
