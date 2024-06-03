@@ -77,6 +77,15 @@ cargo run -- faucet 5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY
 # Start producing measurements.
 cat <(echo -n '{"value":5}') | nc 127.0.0.1 3322
 ```
+
+## Documentation
+
+[Initialize entity (cell company)](./docs/cell-company-initialization.md) \
+[Create and link sub-entity (cell tower)](./docs/cell-tower-creation.md) \
+[Issue certificate](./docs/issue-certificate.md) \
+[How to use the map?](./docs/how-to-use-map.md) \
+[Connect wallet](./docs/connect-wallet.md)
+
 ## Drift
 
 In case you need fully automatically started environment you can use drift mode.
