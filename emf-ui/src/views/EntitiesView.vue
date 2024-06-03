@@ -5,6 +5,8 @@ import { initializeApiContract } from '@/smart-contract.js'
 import { contractTx } from '@scio-labs/use-inkathon'
 import { web3FromAddress } from '@polkadot/extension-dapp'
 import { initializeSigner } from '@/signer-extension'
+import { mnemonicGenerate } from '@polkadot/util-crypto'
+import { Keyring } from '@polkadot/keyring'
 
 export default {
   data() {
@@ -17,6 +19,7 @@ export default {
       }),
       state: 0,
       newSubEntity: '',
+      newSubEntityMnemonic: '',
       newLocation: '',
       subEntities: [],
       readyToIssue: new Map(),
@@ -196,6 +199,13 @@ export default {
       this.readyToIssue.delete(subEntity)
       this.issued.set(subEntity, null)
     },
+    generateKeyPair() {
+      const mnemonic = mnemonicGenerate()
+      this.newSubEntityMnemonic = mnemonic
+      const keyring = new Keyring({ type: 'sr25519', ss58Format: 0 })
+      const keypair = keyring.addFromUri(mnemonic, {}, 'ed25519')
+      this.newSubEntity = keypair.address
+    },
     goToCellTower(location) {
       router.push({
         name: 'map-precise-location',
@@ -241,14 +251,19 @@ export default {
         placeholder="52.4338,13.6505"
         style="margin-bottom: 25px"
       />
+      <div v-if="newSubEntityMnemonic !== ''">
+        Generated cell tower secret mnemonic:
+        <br />
+        <code>{{ newSubEntityMnemonic }}</code>
+      </div>
       <div class="one-line-container">
         <button style="width: 100%; padding: 25px" @click="createSubEntity">
           Create cell tower
         </button>
-        <button
-          style="width: 100%; padding: 25px; margin-left: 25px"
-          @click="cancelSubEntityCreationForm"
-        >
+        <button style="width: 100%; padding: 25px; margin: 25px" @click="generateKeyPair">
+          Generate key pair
+        </button>
+        <button style="width: 100%; padding: 25px" @click="cancelSubEntityCreationForm">
           Cancel
         </button>
       </div>
