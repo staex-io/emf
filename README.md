@@ -57,7 +57,7 @@ cd agent
 # Run agent.
 # Use smart contract address from deploy stage.
 rm -rf emf.indexer.sqlite ; RUST_LOG=trace,agent::indexer=error TIME_TO_ACCUMULATE=0 \
-  cargo run -- run 5GPGUPaCzQKHao1bQ5y9BybDzbpsbjAribjTQ3xSe1dcxJxe
+  cargo run -- run 5GPGUPaCzQKHao1bQ5y9BybDzbpsbjAribjTQ3xSe1dcxJxe '<phrase>'
 
 # In separate terminal session.
 cd emf-ui

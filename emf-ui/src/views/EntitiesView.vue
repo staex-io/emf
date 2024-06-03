@@ -202,8 +202,8 @@ export default {
     generateKeyPair() {
       const mnemonic = mnemonicGenerate()
       this.newSubEntityMnemonic = mnemonic
-      const keyring = new Keyring({ type: 'sr25519', ss58Format: 0 })
-      const keypair = keyring.addFromUri(mnemonic, {}, 'ed25519')
+      const keyring = new Keyring({ type: 'sr25519', ss58Format: 42 })
+      const keypair = keyring.addFromUri(mnemonic, {}, 'sr25519')
       this.newSubEntity = keypair.address
     },
     goToCellTower(location) {

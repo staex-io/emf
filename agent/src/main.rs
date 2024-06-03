@@ -122,6 +122,7 @@ async fn main() -> Res<()> {
                 };
             let keypair =
                 subxt_signer::sr25519::Keypair::from_phrase(&Mnemonic::parse(phrase)?, None)?;
+            info!("using agent with account id: {}", keypair.public_key().to_account_id());
             let state = State {
                 api: api.clone(),
                 rpc_legacy,
