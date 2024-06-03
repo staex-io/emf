@@ -38,6 +38,65 @@ This software contains by three parts:
 1. [Smart contract](./emf_contract/) using [ink!](https://use.ink/) language
 2. [Agent](./agent/) - software which receives new measurements and store them on-chain
 3. [Indexer](./agent/) - part of the agent which listens for on-chain events and store them in the database
+3. [User interface](./emf-ui/) - EMF user interface to see cell towers on the map and crete new one
+
+## How to run
+
+```shell
+cd emf_contract
+# Run substrate node.
+make run_substrate
+
+# In separate terminal session.
+cd emf_contract
+# Deploy smart contract.
+make deploy
+
+# In separate terminal session.
+cd agent
+# Run agent.
+# Use smart contract address from deploy stage.
+rm -rf emf.indexer.sqlite ; RUST_LOG=trace,agent::indexer=error TIME_TO_ACCUMULATE=0 \
+  cargo run -- run 5GPGUPaCzQKHao1bQ5y9BybDzbpsbjAribjTQ3xSe1dcxJxe '<phrase>'
+
+# In separate terminal session.
+cd emf-ui
+# Prepare .env file.
+echo -n "VITE_CONTRACT_ADDRESS=5GPGUPaCzQKHao1bQ5y9BybDzbpsbjAribjTQ3xSe1dcxJxe" > .env
+# Run user interface.
+make run-docker
+# Open browser page at: http://localhost:5173/
+
+# In case you need tokens for your wallet (entity or sub-entity).
+cd agent
+# Do faucet.
+cargo run -- faucet 5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY
+
+# Initialize entity and sub-entity on UI.
+
+# Start producing measurements.
+cat <(echo -n '{"value":5}') | nc 127.0.0.1 3322
+```
+
+## Documentation
+
+[Initialize entity (cell company)](./docs/cell-company-initialization.md) \
+[Create and link sub-entity (cell tower)](./docs/cell-tower-creation.md) \
+[Issue certificate](./docs/issue-certificate.md) \
+[How to use the map?](./docs/how-to-use-map.md) \
+[Connect wallet](./docs/connect-wallet.md)
+
+## Drift
+
+In case you need fully automatically started environment you can use drift mode.
+
+You can start drift mode for demo purposes. In this mode Substrate node starts automatically, smart contract is deployed and agent with indexer is up and running. Also in this mode there are 3 already prepared towers with data and certificates.
+
+This mode has a timeout for an hour after tests passing. Also it starts to generate random measurements for random entities and sub-entities.
+
+```shell
+cd agent && make drift
+```
 
 ## Staex Public Network (SPN)
 

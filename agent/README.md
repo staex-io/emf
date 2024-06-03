@@ -30,6 +30,21 @@ Agent configuration can be updated by two environment variables:
 1. `SMART_CONTRACT_ADDRESS` - to change smart contract address
 2. `TIME_TO_ACCUMULATE` - you can use this env to change interval between first and last measurements which are stored to start saving measurement on-chain
 
+Also using command line arguments for `run` command:
+
+```shell
+Run agent
+
+Usage: 
+
+Arguments:
+  [CONTRACT_ADDRESS]  Specify smart contract address [default: 5GPGUPaCzQKHao1bQ5y9BybDzbpsbjAribjTQ3xSe1dcxJxe]
+  [PHRASE]            Specify cell tower private phrase. Address of the default phrase: 5CwQRPkqmUg5arWuJtw2qoGRL4oRDjguzmrcrSSsv35Cuv3s [default: "corn recipe you dish oil glass found wood weekend above thumb siege"]
+
+Options:
+  -h, --help  Print help
+```
+
 Agent stores measurements in `measurements.json` file:
 
 ```json
@@ -85,13 +100,3 @@ make test
 ```
 
 In tests we automatically start substrate contract node, build and deploy smart contract, run agent and indexer.
-
-## Drift
-
-In case you need fully automatically started environment you can use drift mode.
-
-This mode has a timeout for an hour after tests passing. Also it starts to generate random measurements for random entities and sub-entities.
-
-```shell
-make drift
-```

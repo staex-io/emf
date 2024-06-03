@@ -5,6 +5,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use log::trace;
 use serde::{Deserialize, Serialize};
 
 use crate::Res;
@@ -50,6 +51,7 @@ pub(crate) fn save(filepath: &str, value: u128) -> Res<Vec<u128>> {
         .unwrap_or(format!("{}", H24.as_secs()))
         .parse()
         .unwrap();
+    trace!("time to accumulate {time_to_accumulate}");
     if data.last_measurement.duration_since(data.first_measurement)?
         >= Duration::from_secs(time_to_accumulate)
     {
