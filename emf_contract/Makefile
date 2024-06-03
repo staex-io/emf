@@ -13,7 +13,7 @@ build:
 deploy: build
 	cargo contract upload --suri //Alice -x
 	cargo contract instantiate --suri //Alice \
-		--args 10 --args 2 --args 1 --args 1 --args 360 --args 2 \
+		--args 10 --args 2 --args 0 --args 1 --args 360 --args 2 \
 		-x --skip-confirm
 	subxt metadata -f bytes > ./emf.metadata.scale
 	subxt codegen --file ./emf.metadata.scale \

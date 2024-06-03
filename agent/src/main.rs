@@ -13,6 +13,7 @@ use subxt::backend::rpc;
 use subxt::config::Header;
 use subxt::utils::{AccountId32, MultiAddress};
 use subxt::{OnlineClient, PolkadotConfig};
+use subxt_signer::bip39::Mnemonic;
 use subxt_signer::sr25519::Keypair;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -75,11 +76,21 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Run agent.
-    Run {},
+    Run {
+        /// Specify smart contract address.
+        #[arg(default_value = "5GPGUPaCzQKHao1bQ5y9BybDzbpsbjAribjTQ3xSe1dcxJxe")]
+        contract_address: String,
+        /// Specify cell tower private phrase.
+        /// Address of the default phrase: 5CwQRPkqmUg5arWuJtw2qoGRL4oRDjguzmrcrSSsv35Cuv3s.
+        #[arg(
+            default_value = "corn recipe you dish oil glass found wood weekend above thumb siege"
+        )]
+        phrase: String,
+    },
     /// Faucet some account with test tokens.
     Faucet {
         /// Specify address to faucet.
-        #[arg(default_value = "5FvLyPSLg9caiZPgdVyXB6uPJXxyC1zfSMR3EthQg1bTwVzR")]
+        #[arg(default_value = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY")]
         address: String,
     },
 }
@@ -94,15 +105,23 @@ async fn main() -> Res<()> {
 
     let cli = Cli::parse();
     match cli.command {
-        Commands::Run {} => {
+        Commands::Run {
+            contract_address,
+            phrase,
+        } => {
             let (stop_s, stop_r) = watch::channel(());
 
             let api = OnlineClient::<PolkadotConfig>::from_url(SUBSTRATE_RPC_URL).await?;
             let rpc = rpc::RpcClient::from_url(SUBSTRATE_RPC_URL).await?;
             let rpc_legacy: LegacyRpcMethods<PolkadotConfig> = LegacyRpcMethods::new(rpc.clone());
             let contract_address: AccountId32 =
-                AccountId32::from_str(&std::env::var("SMART_CONTRACT_ADDRESS")?)?;
-            let keypair = subxt_signer::sr25519::dev::bob();
+                if let Ok(contract_address) = std::env::var("SMART_CONTRACT_ADDRESS") {
+                    AccountId32::from_str(&contract_address)?
+                } else {
+                    AccountId32::from_str(&contract_address)?
+                };
+            let keypair =
+                subxt_signer::sr25519::Keypair::from_phrase(&Mnemonic::parse(phrase)?, None)?;
             let state = State {
                 api: api.clone(),
                 rpc_legacy,
@@ -243,20 +262,27 @@ async fn handle_rpc_request(req: &RpcRequest, state: State) -> Res<()> {
         .await;
     }
     let last_iteration = storage::save(STORAGE_FILEPATH, req.value)?;
+    debug!("successfully saved new measurement to the storage");
     if !last_iteration.is_empty() {
         let mut avg_value = 0;
         for value in &last_iteration {
             avg_value += value;
         }
         avg_value /= last_iteration.len() as u128;
-        store_measurement(
+        debug!("try to save measurement on-chain");
+        if let Err(e) = store_measurement(
             &state.api,
             &state.rpc_legacy,
             &state.keypair,
             state.contract_address,
             avg_value,
         )
-        .await?;
+        .await
+        {
+            error!("failed to store measurement on-chain: {:?}", e)
+        } else {
+            info!("successfully saved new measurement on-chain");
+        }
     }
     Ok(())
 }

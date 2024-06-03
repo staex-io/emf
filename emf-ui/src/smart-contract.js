@@ -20,11 +20,7 @@ export const initializeApiContract = async () => {
     api.rpc.system.version(),
   ])
   console.log(`You are connected to chain ${chain} using ${nodeName} v${nodeVersion}`)
-  const contract = new ContractPromise(
-    api,
-    metadata,
-    '5GPGUPaCzQKHao1bQ5y9BybDzbpsbjAribjTQ3xSe1dcxJxe',
-  )
+  const contract = new ContractPromise(api, metadata, import.meta.env.VITE_CONTRACT_ADDRESS)
 
   globalApi = api
   globalContract = contract

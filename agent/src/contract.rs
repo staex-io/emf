@@ -2,7 +2,7 @@ use std::io::BufRead;
 
 use contract_transcode::{ContractMessageTranscoder, Value};
 use log::trace;
-use pallet_contracts_primitives::ContractExecResult;
+use pallet_contracts::ContractExecResult;
 use subxt::{
     backend::legacy::LegacyRpcMethods,
     config::polkadot::{PolkadotExtrinsicParamsBuilder, H256},
@@ -213,7 +213,14 @@ async fn dry_run(
             trace!("debug messages after dry run: {}", line);
         }
     }
-    let exec_res_data = exec_res.result.map_err(|_| "failed to parse exec result".to_string())?;
+    let exec_res_data = exec_res.result.map_err(|e| match e {
+        sp_runtime::DispatchError::Module(e) => match e.index {
+            8 => "looks like keypair doesn't have enough tokens to pay for transaction fee"
+                .to_string(),
+            _ => format!("failed to parse exec result: {:?}", e),
+        },
+        e => format!("failed to parse exec result: {:?}", e),
+    })?;
     if exec_res_data.did_revert() {
         let data = transcoder.decode_message_return(message, &mut exec_res_data.data.as_slice())?;
         return Err(parse_revert(data));
