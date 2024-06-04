@@ -230,7 +230,9 @@ export default {
       style="text-align: center; margin: 25px"
       class="item"
     >
-      <button style="width: 100%; padding: 50px" @click="initEntity">Initialize entity</button>
+      <button style="width: 100%; padding: 50px" @click="initEntity">
+        Initialize cell company
+      </button>
     </div>
     <div v-if="state === states.CREATE_SUB_ENTITY" style="margin: 50px">
       <label for="subEntity">Cell tower address</label>

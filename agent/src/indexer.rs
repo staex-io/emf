@@ -70,6 +70,7 @@ struct SubEntityCreated {
 
 impl DatabaseSaver for SubEntityCreated {
     async fn save(self, db: &DatabasePointer, timestamp: SystemTime) -> Res<()> {
+        debug!("received sub-entity created event {} {}", self.entity, self.sub_entity,);
         sqlx::query("insert into sub_entities (entity, account_id, location, created_at) values (?1, ?2, ?3, ?4)")
             .bind(self.entity.to_string())
             .bind(self.sub_entity.to_string())
@@ -189,7 +190,7 @@ async fn run_indexer(api: OnlineClient<PolkadotConfig>, rpc: RpcClient, database
     };
 
     let mut current_block_index: u64 = 0;
-    let mut workers: usize = 2;
+    let mut workers: usize = 1;
     loop {
         let saved_current_block_index = current_block_index;
         let saved_workers = workers;
