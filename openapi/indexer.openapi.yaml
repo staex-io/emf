@@ -33,7 +33,7 @@ paths:
       tags: ["General"]
       operationId: QuerySubEntities
       parameters:
-        - $ref: "#/components/parameters/Entity"
+        - $ref: "#/components/parameters/OptionalAccountId"
       responses:
         200:
           description: Ok
@@ -59,7 +59,7 @@ paths:
       tags: ["General"]
       operationId: QuerySpikes
       parameters:
-        - $ref: "#/components/parameters/SubEntity"
+        - $ref: "#/components/parameters/RequiredAccountId"
       responses:
         200:
           description: Ok
@@ -83,7 +83,7 @@ paths:
       tags: ["General"]
       operationId: QueryTooManySpikes
       parameters:
-        - $ref: "#/components/parameters/SubEntity"
+        - $ref: "#/components/parameters/RequiredAccountId"
       responses:
         200:
           description: Ok
@@ -105,7 +105,7 @@ paths:
       tags: ["General"]
       operationId: QueryReadyCertificates
       parameters:
-        - $ref: "#/components/parameters/SubEntity"
+        - $ref: "#/components/parameters/RequiredAccountId"
       responses:
         200:
           description: Ok
@@ -121,6 +121,30 @@ paths:
                 required: [sub_entity, created_at]
         500:
           $ref: "#/components/responses/InternalServerError"
+  /issued-certificates:
+    get:
+      summary: Query on-chain issued certificates
+      tags: ["General"]
+      operationId: QueryIssuedCertificates
+      parameters:
+        - $ref: "#/components/parameters/RequiredAccountId"
+      responses:
+        200:
+          description: Ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sub_entity:
+                    type: string
+                  c_index:
+                    type: integer
+                  created_at:
+                    type: integer
+                required: [sub_entity, c_index, created_at]
+        500:
+          $ref: "#/components/responses/InternalServerError"
 components:
   responses:
     InternalServerError:
@@ -130,15 +154,15 @@ components:
           schema:
             type: string
   parameters:
-    Entity:
+    OptionalAccountId:
       in: query
-      name: entity
+      name: account_id
       schema:
         type: string
-      required: true
-    SubEntity:
+      required: false
+    RequiredAccountId:
       in: query
-      name: sub-entity
+      name: account_id
       schema:
         type: string
       required: true
