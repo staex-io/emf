@@ -22,7 +22,7 @@ We partner with a cell tower company that is particularly interested in reducing
 
 **[Flow](./docs/render/Flow.svg)**
 
-By flow below you can find how this software works step-by-step.
+By flow above you can find how this software works step-by-step.
 
 EMF - electromagnetic field.
 
