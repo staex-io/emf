@@ -36,9 +36,15 @@ export default {
   watch: {
     async selectedWallet(index) {
       this.wallet = this.wallets[index]
-      initializeWallet(this.wallet).then(() => {
-        initializeAccounts(this.wallet).then((accounts) => (this.accounts = accounts))
-      })
+      initializeWallet(this.wallet).
+        then(() => {
+          initializeAccounts(this.wallet).then((accounts) => (this.accounts = accounts))
+        }).
+        catch((e) => {
+          alert("There is an error on wallet reconnecting. Check console for the error.")
+          sessionStorage.clear()
+          window.location.reload()
+        })
       sessionStorage.setItem(WALLET_STORAGE_KEY_NAME, JSON.stringify(this.wallet))
     },
     async selectedAccount(index) {
@@ -48,12 +54,18 @@ export default {
   },
   async beforeMount() {
     router.push({ path: window.location.pathname })
-    const { wallet, account, isWeb3Injected } = await checkWallet()
-    this.wallet = wallet
-    this.account = account
-    this.web3Injected = isWeb3Injected
-    if (this.wallet && !this.account) {
-      this.accounts = await initializeAccounts(this.wallet)
+    try {
+      const { wallet, account, isWeb3Injected } = await checkWallet()
+      this.wallet = wallet
+      this.account = account
+      this.web3Injected = isWeb3Injected
+      if (this.wallet && !this.account) {
+        this.accounts = await initializeAccounts(this.wallet)
+      }
+    } catch (e) {
+      alert("There is an error on wallet reconnecting. Check console for the error.")
+      sessionStorage.clear()
+      window.location.reload()
     }
   },
   methods: {
