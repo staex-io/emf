@@ -16,7 +16,7 @@ scale = { package = "parity-scale-codec", version = "3.6.12", features = ["deriv
 axum = { version = "0.7.5", features = [], default-features = true }
 sqlx = { version = "0.7.4", features = ["sqlite", "migrate", "macros"], default-features = false }
 serde_qs = { version = "0.13.0", features = [], default-features = false }
-clap = { version = "4.5.4", features = ["std", "derive", "help"], default-features = false }
+clap = { version = "4.5.7", features = ["std", "derive", "help"], default-features = false }
 sp-runtime = { version = "37.0.0", features = [], default-features = false }
 pallet-contracts = { version = "33.0.0", features = ["std"], default-features = false }
 
