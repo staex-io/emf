@@ -19,3 +19,7 @@ You can see that now status is 'Issued'.
 And we can check certificate details on the map.
 
 ![](images/issue-certificate/issued-map.png)
+
+## Not ready
+
+If you see status not ready it means cell tower doesn't have enough records to issue a certificate.
