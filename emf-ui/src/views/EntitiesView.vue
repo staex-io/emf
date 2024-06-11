@@ -3,14 +3,14 @@ import router from '@/router'
 
 import { initializeApiContract } from '@/smart-contract.js'
 import { contractTx } from '@scio-labs/use-inkathon'
-import { web3FromAddress } from '@polkadot/extension-dapp'
-import { initializeSigner } from '@/signer-extension'
+import { checkWallet } from '@/signer-extension'
 import { mnemonicGenerate } from '@polkadot/util-crypto'
 import { Keyring } from '@polkadot/keyring'
 
 export default {
   data() {
     return {
+      signerWallet: null,
       signerAccount: null,
       entityInitialized: false,
       states: Object.freeze({
@@ -32,7 +32,11 @@ export default {
   methods: {
     async initialize() {
       try {
-        this.signerAccount = await initializeSigner()
+        const { wallet, account } = await checkWallet()
+        if (!wallet) throw 'Wallet is not connected!'
+        if (!account) throw 'Account is not connected!'
+        this.signerWallet = wallet
+        this.signerAccount = account
       } catch (e) {
         alert(e)
         return
@@ -116,8 +120,7 @@ export default {
     },
     async initEntity() {
       const { api, contract } = await initializeApiContract()
-      const injector = await web3FromAddress(this.signerAccount.address)
-      api.setSigner(injector.signer)
+      api.setSigner(this.signerWallet.signer)
       try {
         // This method can also override current value for provided key.
         // If you try to update key with the same value as record already has,
@@ -141,8 +144,7 @@ export default {
     },
     async createSubEntity() {
       const { api, contract } = await initializeApiContract()
-      const injector = await web3FromAddress(this.signerAccount.address)
-      api.setSigner(injector.signer)
+      api.setSigner(this.signerWallet.signer)
       try {
         // This method can also override current value for provided key.
         // If you try to update key with the same value as record already has,
@@ -170,8 +172,7 @@ export default {
     },
     async issueCertificate(subEntity) {
       const { api, contract } = await initializeApiContract()
-      const injector = await web3FromAddress(this.signerAccount.address)
-      api.setSigner(injector.signer)
+      api.setSigner(this.signerWallet.signer)
       try {
         // This method can also override current value for provided key.
         // If you try to update key with the same value as record already has,
@@ -221,12 +222,16 @@ export default {
 <template>
   <div class="container">
     <div>
-      <p v-if="signerAccount === null" class="error alert" style="margin: 0">
-        There are no connected accounts (see signer extension request).
+      <p
+        v-if="signerWallet === null || signerAccount === null"
+        class="error alert"
+        style="margin: 0"
+      >
+        There are no connected wallets (see signer extension request).
       </p>
     </div>
     <div
-      v-if="signerAccount && !entityInitialized"
+      v-if="signerWallet && signerAccount && !entityInitialized"
       style="text-align: center; margin: 25px"
       class="item"
     >

@@ -15,10 +15,10 @@
     "@fontsource/roboto": "^5.0.13",
     "@polkadot/api": "^11.2.1",
     "@polkadot/api-contract": "^11.2.1",
-    "@polkadot/extension-dapp": "^0.47.5",
     "@polkadot/keyring": "^12.6.2",
     "@polkadot/util-crypto": "^12.6.2",
     "@scio-labs/use-inkathon": "^0.10.0",
+    "@talismn/connect-wallets": "^1.2.5",
     "leaflet": "^1.9.4",
     "vue": "^3.4.27",
     "vue-router": "^4.3.2"
